@@ -6,6 +6,7 @@ window.addEventListener("DOMContentLoaded", () => {
     acInput: document.getElementById("acInput"),
     speedInput: document.getElementById("speedInput"),
     masterSideOnlyInput: document.getElementById("masterSideOnlyInput"),
+    holderGapInput: document.getElementById("holderGapInput"),
     addCardBtn: document.getElementById("addCardBtn"),
     clearFormBtn: document.getElementById("clearFormBtn"),
     cardsList: document.getElementById("cardsList"),
@@ -74,6 +75,7 @@ window.addEventListener("DOMContentLoaded", () => {
     DOM.acInput.addEventListener("input", updatePreview);
     DOM.speedInput.addEventListener("input", updatePreview);
     DOM.masterSideOnlyInput.addEventListener("change", updatePreview);
+    DOM.holderGapInput.addEventListener("change", updatePreview);
     DOM.addCardBtn.addEventListener("click", handleAddCard);
     DOM.clearFormBtn.addEventListener("click", handleClearForm);
     DOM.downloadPdfBtn.addEventListener("click", handleDownloadPdf);
@@ -85,6 +87,7 @@ window.addEventListener("DOMContentLoaded", () => {
       ac: DOM.acInput.value.trim(),
       speed: DOM.speedInput.value.trim(),
       masterSideOnly: DOM.masterSideOnlyInput.checked,
+      holderGap: DOM.holderGapInput.checked,
     };
   }
 
@@ -117,6 +120,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   function updatePreview() {
     const previewCard = getPreviewCardData();
+    DOM.cardPreview.className = buildCardPreviewClassName(previewCard);
     DOM.cardPreview.innerHTML = buildCardMarkup(previewCard);
     toggleEasterEgg(previewCard.name);
   }
@@ -128,13 +132,14 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   function getPreviewCardData() {
-    const { name, ac, speed, masterSideOnly } = getFormData();
+    const { name, ac, speed, masterSideOnly, holderGap } = getFormData();
 
     return {
       name,
       ac,
       speed,
       masterSideOnly,
+      holderGap,
       photoDataUrl: currentPreviewPhotoDataUrl,
     };
   }
@@ -155,8 +160,16 @@ window.addEventListener("DOMContentLoaded", () => {
     return canvas.toDataURL("image/png");
   }
 
+  function buildCardPreviewClassName(card) {
+    return `card-preview${card.holderGap ? " with-holder-gap" : ""}`;
+  }
+
+  function getRenderedCardHeight(card) {
+    return card.holderGap ? CONFIG.pdf.cardHeight + 10 : CONFIG.pdf.cardHeight;
+  }
+
   function handleAddCard() {
-    const { name, ac, speed, masterSideOnly } = getFormData();
+    const { name, ac, speed, masterSideOnly, holderGap } = getFormData();
     const photoDataUrl = currentPreviewPhotoDataUrl || getCroppedPhotoDataUrl();
 
     cards.push({
@@ -164,6 +177,7 @@ window.addEventListener("DOMContentLoaded", () => {
       ac,
       speed,
       masterSideOnly,
+      holderGap,
       photoDataUrl,
     });
 
@@ -211,10 +225,11 @@ window.addEventListener("DOMContentLoaded", () => {
 
   function formatCardLabel(card) {
     const sideLabel = card.masterSideOnly ? " | одна сторона" : "";
+    const holderGapLabel = card.holderGap ? " | держатель" : "";
 
     return `${card.name || "Без имени"} | КД ${card.ac || "—"} | Скорость ${
       card.speed || "—"
-    }${sideLabel}`;
+    }${sideLabel}${holderGapLabel}`;
   }
 
   function hasEmptyFields(card) {
@@ -230,6 +245,8 @@ window.addEventListener("DOMContentLoaded", () => {
     DOM.nameInput.value = "";
     DOM.acInput.value = "";
     DOM.speedInput.value = "";
+    DOM.masterSideOnlyInput.checked = false;
+    DOM.holderGapInput.checked = false;
 
     updatePreview();
 
@@ -270,14 +287,14 @@ window.addEventListener("DOMContentLoaded", () => {
         currentX,
         currentY,
         CONFIG.pdf.cardWidth,
-        CONFIG.pdf.cardHeight
+        getRenderedCardHeight(cards[i])
       );
 
       const isLastColumn = (i + 1) % CONFIG.pdf.cols === 0;
 
       if (isLastColumn) {
         currentX = CONFIG.pdf.startX;
-        currentY += CONFIG.pdf.cardHeight + CONFIG.pdf.gapY;
+        currentY += getRenderedCardHeight(cards[i]) + CONFIG.pdf.gapY;
       } else {
         currentX += CONFIG.pdf.cardWidth + CONFIG.pdf.gapX;
       }
@@ -289,7 +306,7 @@ window.addEventListener("DOMContentLoaded", () => {
   async function renderCardToDataUrl(card) {
     const temp = document.createElement("div");
 
-    temp.className = "card-preview card-preview-export";
+    temp.className = `${buildCardPreviewClassName(card)} card-preview-export`;
     temp.style.position = "fixed";
     temp.style.left = "-10000px";
     temp.style.top = "0";
@@ -340,16 +357,24 @@ window.addEventListener("DOMContentLoaded", () => {
       : `<span class="card-photo-placeholder">${CONFIG.placeholders.photo}</span>`;
 
     return `
-      <div class="card-photo">
-        ${photoMarkup}
+      <div class="card-half-content">
+        <div class="card-photo">
+          ${photoMarkup}
+        </div>
+        <div class="card-name${card.name ? "" : " empty"}">
+          ${safeName || CONFIG.placeholders.name}
+        </div>
+        <div class="card-stats">
+          ${buildStatMarkup("shield", card.ac, CONFIG.icons.ac)}
+          ${buildStatMarkup("speed", card.speed, CONFIG.icons.speed)}
+        </div>
       </div>
-      <div class="card-name${card.name ? "" : " empty"}">
-        ${safeName || CONFIG.placeholders.name}
-      </div>
-      <div class="card-stats">
-        ${buildStatMarkup("shield", card.ac, CONFIG.icons.ac)}
-        ${buildStatMarkup("speed", card.speed, CONFIG.icons.speed)}
-      </div>
+      ${
+        // Extra tail is added without shrinking the content area of the card.
+        card.holderGap
+          ? `<div class="card-bottom-gap" aria-hidden="true"></div>`
+          : ""
+      }
     `;
   }
 

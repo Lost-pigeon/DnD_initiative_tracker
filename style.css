@@ -233,6 +233,10 @@
       overflow: hidden;
     }
 
+    .card-preview.with-holder-gap {
+      height: 130mm;
+    }
+
     .card-preview-export {
       margin: 0;
     }
@@ -247,6 +251,10 @@
       pointer-events: none;
     }
 
+    .card-preview.with-holder-gap .card-cut-line {
+      top: 65mm;
+    }
+
     .card-half {
       position: absolute;
       left: 0;
@@ -258,7 +266,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: flex-start;
-      gap: 2px;
+      gap: 0;
     }
 
     .card-half.top {
@@ -269,6 +277,17 @@
 
     .card-half.bottom {
       bottom: 0;
+    }
+
+    .card-half-content {
+      width: 100%;
+      height: 60mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 2px;
+      box-sizing: border-box;
     }
 
     /* Фото: 40мм высоты внутри половины (60мм) => 40/60 = 66.6667% */
@@ -332,6 +351,11 @@
       padding: 0 8px 6px;
       box-sizing: border-box;
       justify-content: center;
+    }
+
+    .card-bottom-gap {
+      width: 100%;
+      flex: 0 0 5mm;
     }
 
     :root { --stat-size: 12mm; }
