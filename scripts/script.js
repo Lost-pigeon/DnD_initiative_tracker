@@ -5,6 +5,7 @@ window.addEventListener("DOMContentLoaded", () => {
     nameInput: document.getElementById("nameInput"),
     acInput: document.getElementById("acInput"),
     speedInput: document.getElementById("speedInput"),
+    masterSideOnlyInput: document.getElementById("masterSideOnlyInput"),
     addCardBtn: document.getElementById("addCardBtn"),
     clearFormBtn: document.getElementById("clearFormBtn"),
     cardsList: document.getElementById("cardsList"),
@@ -72,6 +73,7 @@ window.addEventListener("DOMContentLoaded", () => {
     DOM.nameInput.addEventListener("input", updatePreview);
     DOM.acInput.addEventListener("input", updatePreview);
     DOM.speedInput.addEventListener("input", updatePreview);
+    DOM.masterSideOnlyInput.addEventListener("change", updatePreview);
     DOM.addCardBtn.addEventListener("click", handleAddCard);
     DOM.clearFormBtn.addEventListener("click", handleClearForm);
     DOM.downloadPdfBtn.addEventListener("click", handleDownloadPdf);
@@ -82,6 +84,7 @@ window.addEventListener("DOMContentLoaded", () => {
       name: DOM.nameInput.value.trim(),
       ac: DOM.acInput.value.trim(),
       speed: DOM.speedInput.value.trim(),
+      masterSideOnly: DOM.masterSideOnlyInput.checked,
     };
   }
 
@@ -119,17 +122,19 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   function refreshPreviewPhotoFromCropper() {
+    // Keep preview and exported cards in sync with the current crop area.
     currentPreviewPhotoDataUrl = getCroppedPhotoDataUrl() || "";
     updatePreview();
   }
 
   function getPreviewCardData() {
-    const { name, ac, speed } = getFormData();
+    const { name, ac, speed, masterSideOnly } = getFormData();
 
     return {
       name,
       ac,
       speed,
+      masterSideOnly,
       photoDataUrl: currentPreviewPhotoDataUrl,
     };
   }
@@ -151,13 +156,14 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   function handleAddCard() {
-    const { name, ac, speed } = getFormData();
+    const { name, ac, speed, masterSideOnly } = getFormData();
     const photoDataUrl = currentPreviewPhotoDataUrl || getCroppedPhotoDataUrl();
 
     cards.push({
       name,
       ac,
       speed,
+      masterSideOnly,
       photoDataUrl,
     });
 
@@ -204,9 +210,11 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   function formatCardLabel(card) {
+    const sideLabel = card.masterSideOnly ? " | одна сторона" : "";
+
     return `${card.name || "Без имени"} | КД ${card.ac || "—"} | Скорость ${
       card.speed || "—"
-    }`;
+    }${sideLabel}`;
   }
 
   function hasEmptyFields(card) {
@@ -247,6 +255,7 @@ window.addEventListener("DOMContentLoaded", () => {
     let currentY = CONFIG.pdf.startY;
 
     for (let i = 0; i < cards.length; i++) {
+      // Start a new page after each full row of printable cards.
       if (i > 0 && i % CONFIG.pdf.cardsPerPage === 0) {
         doc.addPage();
         currentX = CONFIG.pdf.startX;
@@ -284,6 +293,7 @@ window.addEventListener("DOMContentLoaded", () => {
     temp.style.position = "fixed";
     temp.style.left = "-10000px";
     temp.style.top = "0";
+    // Render off-screen so html2canvas captures the same markup as the live preview.
     temp.innerHTML = buildCardMarkup(card);
 
     document.body.appendChild(temp);
@@ -299,10 +309,22 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   function buildCardMarkup(card) {
+    const detailsOnlyOnOneSide = Boolean(card.masterSideOnly);
+    const hiddenDetailsCard = detailsOnlyOnOneSide
+      ? {
+          // Leave the structure visible for handwriting while keeping entered values
+          // only on the master's side of the card.
+          ...card,
+          name: "",
+          ac: "",
+          speed: "",
+        }
+      : card;
+
     return `
       <div class="card-cut-line"></div>
       <div class="card-half top">
-        ${buildCardHalfMarkup(card)}
+        ${buildCardHalfMarkup(hiddenDetailsCard)}
       </div>
       <div class="card-half bottom">
         ${buildCardHalfMarkup(card)}
@@ -337,6 +359,7 @@ window.addEventListener("DOMContentLoaded", () => {
     return `
       <div class="${className}${hasValue ? "" : " stat-empty"}">
         ${
+          // Empty stats keep the icon shape so the user can fill values by hand later.
           hasValue
             ? `<span>${escapeHtml(value)}</span>${iconSrc}`
             : `<span>${escapeHtml()}</span>${iconSrc}`

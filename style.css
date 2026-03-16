@@ -86,6 +86,27 @@
       margin-top: 8px;
     }
 
+    .toggle-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle-row input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      accent-color: #4f46e5;
+    }
+
+    .toggle-row span {
+      font-size: 14px;
+      color: #111827;
+    }
+
     .btn {
       border-radius: 999px;
       padding: 10px 16px;
