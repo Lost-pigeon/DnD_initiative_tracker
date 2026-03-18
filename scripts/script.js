@@ -165,7 +165,7 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   function getRenderedCardHeight(card) {
-    return card.holderGap ? CONFIG.pdf.cardHeight + 10 : CONFIG.pdf.cardHeight;
+    return card.holderGap ? CONFIG.pdf.cardHeight + 20 : CONFIG.pdf.cardHeight;
   }
 
   function handleAddCard() {

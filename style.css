@@ -234,7 +234,7 @@
     }
 
     .card-preview.with-holder-gap {
-      height: 130mm;
+      height: 140mm;
     }
 
     .card-preview-export {
@@ -252,7 +252,7 @@
     }
 
     .card-preview.with-holder-gap .card-cut-line {
-      top: 65mm;
+      top: 70mm;
     }
 
     .card-half {
