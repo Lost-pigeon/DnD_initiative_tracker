@@ -228,9 +228,20 @@
       position: relative;
       margin: 0 auto;
       background: #ffffff;
-      border: 1px solid #111827;
+      box-sizing: border-box;
+      border: none;
       border-radius: 0;
       overflow: hidden;
+    }
+
+    .card-preview::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border: 1px solid #111827;
+      box-sizing: border-box;
+      pointer-events: none;
+      z-index: 3;
     }
 
     .card-preview.with-holder-gap {
