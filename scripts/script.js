@@ -217,6 +217,106 @@ window.addEventListener("DOMContentLoaded", () => {
     };
   }
 
+  function createPdfRow() {
+    return {
+      cards: [],
+      width: 0,
+      height: 0,
+    };
+  }
+
+  function createPdfPage() {
+    return {
+      rows: [],
+      contentHeight: 0,
+    };
+  }
+
+  function getCenteredOffset(containerSize, contentSize, minimumOffset) {
+    return Math.max(minimumOffset, (containerSize - contentSize) / 2);
+  }
+
+  function commitPdfRow(page, row, layout) {
+    if (!row.cards.length) {
+      return;
+    }
+
+    if (page.rows.length) {
+      page.contentHeight += layout.gapY;
+    }
+
+    page.rows.push(row);
+    page.contentHeight += row.height;
+  }
+
+  function getProjectedPageHeight(page, nextRowHeight, layout) {
+    return (
+      page.contentHeight +
+      (page.rows.length ? layout.gapY : 0) +
+      nextRowHeight
+    );
+  }
+
+  function buildPdfPages(cardsToPlace, pageWidth, pageHeight, layout) {
+    const pages = [];
+    const maxContentWidth = Math.max(pageWidth - layout.startX * 2, 0);
+    const maxContentHeight = Math.max(pageHeight - layout.startY * 2, 0);
+
+    let currentPage = createPdfPage();
+    let currentRow = createPdfRow();
+
+    cardsToPlace.forEach((card) => {
+      const cardEntry = {
+        card,
+        width: getRenderedCardWidth(card),
+        height: getRenderedCardHeight(card),
+      };
+      const nextRowWidth = currentRow.cards.length
+        ? currentRow.width + layout.gapX + cardEntry.width
+        : cardEntry.width;
+      const nextRowHeight = currentRow.cards.length
+        ? Math.max(currentRow.height, cardEntry.height)
+        : cardEntry.height;
+      const fitsCurrentRowWidth =
+        nextRowWidth <= maxContentWidth || !currentRow.cards.length;
+      const fitsCurrentPageHeight =
+        getProjectedPageHeight(currentPage, nextRowHeight, layout) <=
+          maxContentHeight ||
+        (!currentPage.rows.length && !currentRow.cards.length);
+
+      if (fitsCurrentRowWidth && fitsCurrentPageHeight) {
+        currentRow.cards.push(cardEntry);
+        currentRow.width = nextRowWidth;
+        currentRow.height = nextRowHeight;
+        return;
+      }
+
+      commitPdfRow(currentPage, currentRow, layout);
+      currentRow = createPdfRow();
+
+      const fitsNextRowOnCurrentPage =
+        getProjectedPageHeight(currentPage, cardEntry.height, layout) <=
+          maxContentHeight || !currentPage.rows.length;
+
+      if (!fitsNextRowOnCurrentPage) {
+        pages.push(currentPage);
+        currentPage = createPdfPage();
+      }
+
+      currentRow.cards.push(cardEntry);
+      currentRow.width = cardEntry.width;
+      currentRow.height = cardEntry.height;
+    });
+
+    commitPdfRow(currentPage, currentRow, layout);
+
+    if (currentPage.rows.length) {
+      pages.push(currentPage);
+    }
+
+    return pages;
+  }
+
   function applyCardMetricsToElement(element, card = {}) {
     const metrics = getCardMetrics(card);
 
@@ -530,43 +630,40 @@ window.addEventListener("DOMContentLoaded", () => {
     const layout = getPageLayoutMetrics();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const pageRightLimit = pageWidth - layout.startX;
-    const pageBottomLimit = pageHeight - layout.startY;
+    const pages = buildPdfPages(cards, pageWidth, pageHeight, layout);
 
-    let currentX = layout.startX;
-    let currentY = layout.startY;
-    let currentRowHeight = 0;
-
-    for (let i = 0; i < cards.length; i++) {
-      const cardWidth = getRenderedCardWidth(cards[i]);
-      const cardHeight = getRenderedCardHeight(cards[i]);
-
-      if (currentX > layout.startX && currentX + cardWidth > pageRightLimit) {
-        currentX = layout.startX;
-        currentY += currentRowHeight + layout.gapY;
-        currentRowHeight = 0;
-      }
-
-      if (currentY > layout.startY && currentY + cardHeight > pageBottomLimit) {
+    for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
+      if (pageIndex > 0) {
         doc.addPage();
-        currentX = layout.startX;
-        currentY = layout.startY;
-        currentRowHeight = 0;
       }
 
-      const imgData = await renderCardToDataUrl(cards[i]);
-
-      doc.addImage(
-        imgData,
-        "PNG",
-        currentX,
-        currentY,
-        cardWidth,
-        cardHeight
+      const page = pages[pageIndex];
+      let currentY = getCenteredOffset(
+        pageHeight,
+        page.contentHeight,
+        layout.startY
       );
 
-      currentRowHeight = Math.max(currentRowHeight, cardHeight);
-      currentX += cardWidth + layout.gapX;
+      for (const row of page.rows) {
+        let currentX = getCenteredOffset(pageWidth, row.width, layout.startX);
+
+        for (const cardEntry of row.cards) {
+          const imgData = await renderCardToDataUrl(cardEntry.card);
+
+          doc.addImage(
+            imgData,
+            "PNG",
+            currentX,
+            currentY,
+            cardEntry.width,
+            cardEntry.height
+          );
+
+          currentX += cardEntry.width + layout.gapX;
+        }
+
+        currentY += row.height + layout.gapY;
+      }
     }
 
     doc.save(CONFIG.pdfFileName);
@@ -576,7 +673,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const temp = document.createElement("div");
 
     temp.className = `${buildCardPreviewClassName(card)} card-preview-export`;
-    applyCardMetricsToElement(temp);
+    applyCardMetricsToElement(temp, card);
     temp.style.position = "fixed";
     temp.style.left = "-10000px";
     temp.style.top = "0";

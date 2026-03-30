@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="D&D tracker favicon">
+  <rect width="120" height="120" rx="24" fill="#111827"/>
+  <path d="M60 12 92 26v28c0 22.3-12.6 42.6-32 52C40.6 96.6 28 76.3 28 54V26l32-14Z" fill="#e5e7eb"/>
+  <path d="M60 24 82 33.8V54c0 15.2-8.1 29.2-22 36.9C46.1 83.2 38 69.2 38 54V33.8L60 24Z" fill="#4f46e5"/>
+  <path d="M46 46h28v8H46zm0 14h20v8H46z" fill="#ffffff"/>
+</svg>
