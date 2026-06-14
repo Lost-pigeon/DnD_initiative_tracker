@@ -1,4 +1,70 @@
 window.addEventListener("DOMContentLoaded", () => {
+  // ─────────────────────────────────────────────
+  //  i18n engine
+  // ─────────────────────────────────────────────
+
+  const LANG_KEY = "dnd_lang";
+
+  function detectLang() {
+    const saved = localStorage.getItem(LANG_KEY);
+    if (saved) return saved;
+    // Берём первый язык браузера, смотрим на префикс
+    const browser = (navigator.languages?.[0] || navigator.language || "ru").toLowerCase();
+    return browser.startsWith("ru") ? "ru" : "en";
+  }
+
+  let currentLang = detectLang();
+
+  function t(key) {
+    return window.I18N[currentLang][key] ?? window.I18N.ru[key] ?? key;
+  }
+  function tjs(key, ...args) {
+    const fn = window.I18N[currentLang].js[key] ?? window.I18N.ru.js[key];
+    return typeof fn === "function" ? fn(...args) : (fn ?? key);
+  }
+
+  function applyTranslations() {
+    const lang = currentLang;
+    document.documentElement.lang = lang;
+    document.title = t("pageTitle");
+    document.querySelector('meta[name="description"]')?.setAttribute("content", t("metaDescription"));
+
+    // text content
+    document.querySelectorAll("[data-i18n]").forEach(el => {
+      const key = el.dataset.i18n;
+      const val = t(key);
+      if (val !== undefined) el.textContent = val;
+    });
+
+    // attributes (data-i18n-attr="attrName:i18nKey,attrName2:i18nKey2")
+    document.querySelectorAll("[data-i18n-attr]").forEach(el => {
+      el.dataset.i18nAttr.split(",").forEach(pair => {
+        const [attr, key] = pair.trim().split(":");
+        const val = t(key.trim());
+        if (val !== undefined) el.setAttribute(attr.trim(), val);
+      });
+    });
+
+    // lang toggle button
+    const btn = DOM.langToggle;
+    if (btn) {
+      btn.title = t("langToggleTitle");
+      btn.setAttribute("aria-label", t("langToggleTitle"));
+    }
+
+    // re-render dynamic parts
+    updatePreview();
+    updateCardSizeHint();
+    renderCardsList();
+    syncEditModeUI();
+  }
+
+  function toggleLang() {
+    currentLang = currentLang === "ru" ? "en" : "ru";
+    localStorage.setItem(LANG_KEY, currentLang);
+    applyTranslations();
+  }
+
   const DOM = {
     imageInput: document.getElementById("imageInput"),
     imagePreview: document.getElementById("imagePreview"),
@@ -17,6 +83,11 @@ window.addEventListener("DOMContentLoaded", () => {
     downloadPdfBtn: document.getElementById("downloadPdfBtn"),
     easterEgg: document.getElementById("easterEgg"),
     cardPreview: document.getElementById("cardPreview"),
+    formTitle: document.getElementById("form-title"),
+    editBanner: document.getElementById("editBanner"),
+    editBannerName: document.getElementById("editBannerName"),
+    cancelEditBtn: document.getElementById("cancelEditBtn"),
+    langToggle: document.getElementById("langToggle"),
   };
 
   const CONFIG = {
@@ -60,9 +131,9 @@ window.addEventListener("DOMContentLoaded", () => {
       gapY: 4,
     },
     placeholders: {
-      name: "____________________",
-      photo: "Фото персонажа",
-      emptyList: "Пока нет карточек в листе.",
+      name:      () => tjs("nameEmpty"),
+      photo:     () => tjs("photoPlaceholder"),
+      emptyList: () => tjs("emptyList"),
     },
     icons: {
       ac: `
@@ -80,21 +151,49 @@ window.addEventListener("DOMContentLoaded", () => {
         </svg>
       `,
     },
-    easterEggName: "Иваныч",
+    easterEggNames: ["Иваныч", "Ivanich"],
   };
 
   let cropper = null;
   let cards = [];
   let currentPreviewPhotoDataUrl = "";
+  // null = create mode; number = index of card being edited
+  let editingIndex = null;
 
   init();
+
+  // ─────────────────────────────────────────────
+  //  Lazy-loading тяжёлых библиотек
+  // ─────────────────────────────────────────────
+
+  const CDN = {
+    cropper:    "https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js",
+    html2canvas:"https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js",
+    jspdf:      "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js",
+  };
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+      const s = document.createElement("script");
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+
+  async function ensureCropper()     { await loadScript(CDN.cropper); }
+  async function ensureHtml2canvas() { await loadScript(CDN.html2canvas); }
+  async function ensureJsPdf()       { await loadScript(CDN.jspdf); }
+
+
 
   function init() {
     syncCardWidthInput();
     syncHolderGapSizeInput();
     bindEvents();
-    updatePreview();
-    renderCardsList();
+    applyTranslations();
   }
 
   function bindEvents() {
@@ -108,33 +207,82 @@ window.addEventListener("DOMContentLoaded", () => {
     DOM.holderGapInput.addEventListener("change", handleHolderGapToggle);
     DOM.holderGapSizeInput.addEventListener("input", handleHolderGapSizeInput);
     DOM.holderGapSizeInput.addEventListener("blur", normalizeHolderGapSizeInput);
-    DOM.addCardBtn.addEventListener("click", handleAddCard);
+    DOM.addCardBtn.addEventListener("click", handleAddOrSaveCard);
     DOM.clearFormBtn.addEventListener("click", handleClearForm);
     DOM.downloadPdfBtn.addEventListener("click", handleDownloadPdf);
+    DOM.cancelEditBtn.addEventListener("click", cancelEdit);
+    DOM.langToggle.addEventListener("click", toggleLang);
   }
 
-  function handleCardWidthInput() {
-    updatePreview();
+  // ─────────────────────────────────────────────
+  //  Edit mode
+  // ─────────────────────────────────────────────
+
+  function syncEditModeUI() {
+    if (editingIndex !== null) {
+      DOM.addCardBtn.textContent = tjs("btnSave");
+      DOM.cancelEditBtn.hidden = false;
+      DOM.editBanner.hidden = false;
+    } else {
+      DOM.addCardBtn.textContent = tjs("btnAdd");
+      DOM.cancelEditBtn.hidden = true;
+      DOM.editBanner.hidden = true;
+    }
   }
 
-  function normalizeCardWidthInput() {
-    syncCardWidthInput();
-    updatePreview();
-  }
+  function enterEditMode(index) {
+    editingIndex = index;
+    const card = cards[index];
 
-  function handleHolderGapToggle() {
+    DOM.nameInput.value = card.name || "";
+    DOM.acInput.value = card.ac || "";
+    DOM.speedInput.value = card.speed || "";
+    DOM.cardWidthInput.value = formatMetricNumber(card.cardWidth ?? CONFIG.card.baseWidth);
+    DOM.masterSideOnlyInput.checked = Boolean(card.masterSideOnly);
+    DOM.holderGapInput.checked = Boolean(card.holderGap);
+    DOM.holderGapSizeInput.value = formatMetricNumber(card.holderGapSize ?? CONFIG.card.baseHolderGapMm);
+
+    currentPreviewPhotoDataUrl = card.photoDataUrl || "";
+
+    if (cropper) {
+      cropper.destroy();
+      cropper = null;
+    }
+    DOM.imagePreview.src = "";
+    DOM.imageInput.value = "";
+
+    DOM.addCardBtn.classList.add("btn-editing");
+    DOM.editBannerName.textContent = card.name || tjs("unnamed");
+    syncEditModeUI();
+
     updateHolderGapSizeState();
     updatePreview();
+    renderCardsList();
+
+    DOM.formTitle.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  function handleHolderGapSizeInput() {
-    updatePreview();
+  function cancelEdit() {
+    exitEditMode();
+    handleClearForm();
   }
 
-  function normalizeHolderGapSizeInput() {
-    syncHolderGapSizeInput();
-    updatePreview();
+  function exitEditMode() {
+    editingIndex = null;
+    DOM.addCardBtn.classList.remove("btn-editing");
+    syncEditModeUI();
+    renderCardsList();
   }
+
+  // ─────────────────────────────────────────────
+  //  Card width / holder gap helpers
+  // ─────────────────────────────────────────────
+
+  function handleCardWidthInput() { updatePreview(); }
+  function normalizeCardWidthInput() { syncCardWidthInput(); updatePreview(); }
+  function handleHolderGapToggle() { updateHolderGapSizeState(); updatePreview(); }
+  function handleHolderGapSizeInput() { updatePreview(); }
+  function normalizeHolderGapSizeInput() { syncHolderGapSizeInput(); updatePreview(); }
 
   function syncCardWidthInput() {
     DOM.cardWidthInput.value = formatMetricNumber(getSelectedCardWidth());
@@ -146,14 +294,12 @@ window.addEventListener("DOMContentLoaded", () => {
 
   function updateHolderGapSizeState() {
     const isEnabled = DOM.holderGapInput.checked;
-
     DOM.holderGapSizeControl.hidden = !isEnabled;
     DOM.holderGapSizeInput.disabled = !isEnabled;
   }
 
   function getSelectedCardWidth() {
     const rawValue = Number.parseFloat(DOM.cardWidthInput.value);
-
     return clampNumber(
       Number.isFinite(rawValue) ? rawValue : CONFIG.card.baseWidth,
       CONFIG.card.minWidth,
@@ -163,13 +309,16 @@ window.addEventListener("DOMContentLoaded", () => {
 
   function getSelectedHolderGapSize() {
     const rawValue = Number.parseFloat(DOM.holderGapSizeInput.value);
-
     return clampNumber(
       Number.isFinite(rawValue) ? rawValue : CONFIG.card.baseHolderGapMm,
       CONFIG.card.minHolderGapMm,
       CONFIG.card.maxHolderGapMm
     );
   }
+
+  // ─────────────────────────────────────────────
+  //  Card metrics & PDF layout
+  // ─────────────────────────────────────────────
 
   function getCardScale(cardWidth = getSelectedCardWidth()) {
     return cardWidth / CONFIG.card.baseWidth;
@@ -198,8 +347,7 @@ window.addEventListener("DOMContentLoaded", () => {
       namePaddingTopPx: CONFIG.card.baseNamePaddingTopPx * scale,
       namePaddingXPx: CONFIG.card.baseNamePaddingXPx * scale,
       namePaddingBottomPx: CONFIG.card.baseNamePaddingBottomPx * scale,
-      nameEmptyPaddingLeftPx:
-        CONFIG.card.baseNameEmptyPaddingLeftPx * scale,
+      nameEmptyPaddingLeftPx: CONFIG.card.baseNameEmptyPaddingLeftPx * scale,
       statsGapPx: CONFIG.card.baseStatsGapPx * scale,
       statsPaddingXPx: CONFIG.card.baseStatsPaddingXPx * scale,
       statsPaddingBottomPx: CONFIG.card.baseStatsPaddingBottomPx * scale,
@@ -217,51 +365,28 @@ window.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  function createPdfRow() {
-    return {
-      cards: [],
-      width: 0,
-      height: 0,
-    };
-  }
-
-  function createPdfPage() {
-    return {
-      rows: [],
-      contentHeight: 0,
-    };
-  }
+  function createPdfRow() { return { cards: [], width: 0, height: 0 }; }
+  function createPdfPage() { return { rows: [], contentHeight: 0 }; }
 
   function getCenteredOffset(containerSize, contentSize, minimumOffset) {
     return Math.max(minimumOffset, (containerSize - contentSize) / 2);
   }
 
   function commitPdfRow(page, row, layout) {
-    if (!row.cards.length) {
-      return;
-    }
-
-    if (page.rows.length) {
-      page.contentHeight += layout.gapY;
-    }
-
+    if (!row.cards.length) return;
+    if (page.rows.length) page.contentHeight += layout.gapY;
     page.rows.push(row);
     page.contentHeight += row.height;
   }
 
   function getProjectedPageHeight(page, nextRowHeight, layout) {
-    return (
-      page.contentHeight +
-      (page.rows.length ? layout.gapY : 0) +
-      nextRowHeight
-    );
+    return page.contentHeight + (page.rows.length ? layout.gapY : 0) + nextRowHeight;
   }
 
   function buildPdfPages(cardsToPlace, pageWidth, pageHeight, layout) {
     const pages = [];
     const maxContentWidth = Math.max(pageWidth - layout.startX * 2, 0);
     const maxContentHeight = Math.max(pageHeight - layout.startY * 2, 0);
-
     let currentPage = createPdfPage();
     let currentRow = createPdfRow();
 
@@ -277,11 +402,9 @@ window.addEventListener("DOMContentLoaded", () => {
       const nextRowHeight = currentRow.cards.length
         ? Math.max(currentRow.height, cardEntry.height)
         : cardEntry.height;
-      const fitsCurrentRowWidth =
-        nextRowWidth <= maxContentWidth || !currentRow.cards.length;
+      const fitsCurrentRowWidth = nextRowWidth <= maxContentWidth || !currentRow.cards.length;
       const fitsCurrentPageHeight =
-        getProjectedPageHeight(currentPage, nextRowHeight, layout) <=
-          maxContentHeight ||
+        getProjectedPageHeight(currentPage, nextRowHeight, layout) <= maxContentHeight ||
         (!currentPage.rows.length && !currentRow.cards.length);
 
       if (fitsCurrentRowWidth && fitsCurrentPageHeight) {
@@ -295,8 +418,8 @@ window.addEventListener("DOMContentLoaded", () => {
       currentRow = createPdfRow();
 
       const fitsNextRowOnCurrentPage =
-        getProjectedPageHeight(currentPage, cardEntry.height, layout) <=
-          maxContentHeight || !currentPage.rows.length;
+        getProjectedPageHeight(currentPage, cardEntry.height, layout) <= maxContentHeight ||
+        !currentPage.rows.length;
 
       if (!fitsNextRowOnCurrentPage) {
         pages.push(currentPage);
@@ -309,102 +432,46 @@ window.addEventListener("DOMContentLoaded", () => {
     });
 
     commitPdfRow(currentPage, currentRow, layout);
-
-    if (currentPage.rows.length) {
-      pages.push(currentPage);
-    }
-
+    if (currentPage.rows.length) pages.push(currentPage);
     return pages;
   }
 
+  // ─────────────────────────────────────────────
+  //  DOM / preview helpers
+  // ─────────────────────────────────────────────
+
   function applyCardMetricsToElement(element, card = {}) {
     const metrics = getCardMetrics(card);
-
     element.style.setProperty("--card-width", formatMillimeters(metrics.widthMm));
     element.style.setProperty("--card-height", formatMillimeters(metrics.heightMm));
-    element.style.setProperty(
-      "--card-height-holder",
-      formatMillimeters(metrics.heightWithHolderMm)
-    );
-    element.style.setProperty(
-      "--card-cut-line-top",
-      formatMillimeters(metrics.cutLineTopMm)
-    );
-    element.style.setProperty(
-      "--card-cut-line-top-holder",
-      formatMillimeters(metrics.cutLineTopWithHolderMm)
-    );
-    element.style.setProperty(
-      "--card-half-content-height",
-      formatMillimeters(metrics.halfContentHeightMm)
-    );
-    element.style.setProperty(
-      "--card-gap-height",
-      formatMillimeters(metrics.gapHeightMm)
-    );
-    element.style.setProperty(
-      "--card-photo-font-size",
-      formatPixels(metrics.photoFontSizePx)
-    );
-    element.style.setProperty(
-      "--card-photo-padding",
-      formatPixels(metrics.photoPaddingPx)
-    );
-    element.style.setProperty(
-      "--card-name-min-height",
-      formatPixels(metrics.nameMinHeightPx)
-    );
-    element.style.setProperty(
-      "--card-name-font-size",
-      formatPixels(metrics.nameFontSizePx)
-    );
-    element.style.setProperty(
-      "--card-name-padding-top",
-      formatPixels(metrics.namePaddingTopPx)
-    );
-    element.style.setProperty(
-      "--card-name-padding-x",
-      formatPixels(metrics.namePaddingXPx)
-    );
-    element.style.setProperty(
-      "--card-name-padding-bottom",
-      formatPixels(metrics.namePaddingBottomPx)
-    );
-    element.style.setProperty(
-      "--card-name-empty-padding-left",
-      formatPixels(metrics.nameEmptyPaddingLeftPx)
-    );
-    element.style.setProperty(
-      "--card-stats-gap",
-      formatPixels(metrics.statsGapPx)
-    );
-    element.style.setProperty(
-      "--card-stats-padding-x",
-      formatPixels(metrics.statsPaddingXPx)
-    );
-    element.style.setProperty(
-      "--card-stats-padding-bottom",
-      formatPixels(metrics.statsPaddingBottomPx)
-    );
-    element.style.setProperty(
-      "--card-stat-size",
-      formatMillimeters(metrics.statSizeMm)
-    );
-    element.style.setProperty(
-      "--card-stat-offset",
-      formatMillimeters(metrics.statOffsetMm)
-    );
+    element.style.setProperty("--card-height-holder", formatMillimeters(metrics.heightWithHolderMm));
+    element.style.setProperty("--card-cut-line-top", formatMillimeters(metrics.cutLineTopMm));
+    element.style.setProperty("--card-cut-line-top-holder", formatMillimeters(metrics.cutLineTopWithHolderMm));
+    element.style.setProperty("--card-half-content-height", formatMillimeters(metrics.halfContentHeightMm));
+    element.style.setProperty("--card-gap-height", formatMillimeters(metrics.gapHeightMm));
+    element.style.setProperty("--card-photo-font-size", formatPixels(metrics.photoFontSizePx));
+    element.style.setProperty("--card-photo-padding", formatPixels(metrics.photoPaddingPx));
+    element.style.setProperty("--card-name-min-height", formatPixels(metrics.nameMinHeightPx));
+    element.style.setProperty("--card-name-font-size", formatPixels(metrics.nameFontSizePx));
+    element.style.setProperty("--card-name-padding-top", formatPixels(metrics.namePaddingTopPx));
+    element.style.setProperty("--card-name-padding-x", formatPixels(metrics.namePaddingXPx));
+    element.style.setProperty("--card-name-padding-bottom", formatPixels(metrics.namePaddingBottomPx));
+    element.style.setProperty("--card-name-empty-padding-left", formatPixels(metrics.nameEmptyPaddingLeftPx));
+    element.style.setProperty("--card-stats-gap", formatPixels(metrics.statsGapPx));
+    element.style.setProperty("--card-stats-padding-x", formatPixels(metrics.statsPaddingXPx));
+    element.style.setProperty("--card-stats-padding-bottom", formatPixels(metrics.statsPaddingBottomPx));
+    element.style.setProperty("--card-stat-size", formatMillimeters(metrics.statSizeMm));
+    element.style.setProperty("--card-stat-offset", formatMillimeters(metrics.statOffsetMm));
   }
 
   function updateCardSizeHint(card = {}) {
     const metrics = getCardMetrics(card);
-    DOM.cardSizeHint.textContent = `Высота карточки: ${formatMetricNumber(
-      metrics.heightMm
-    )} мм, с держателем (${formatMetricNumber(
-      metrics.holderGapMm
-    )} мм): ${formatMetricNumber(
-      metrics.heightWithHolderMm
-    )} мм.`;
+    DOM.cardSizeHint.textContent = tjs(
+      "cardSizeHint",
+      formatMetricNumber(metrics.heightMm),
+      formatMetricNumber(metrics.holderGapMm),
+      formatMetricNumber(metrics.heightWithHolderMm)
+    );
   }
 
   function getFormData() {
@@ -419,22 +486,19 @@ window.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  function handleImageChange(event) {
+  async function handleImageChange(event) {
     currentPreviewPhotoDataUrl = "";
     updatePreview();
 
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
+    await ensureCropper();
 
+    const reader = new FileReader();
     reader.onload = () => {
       DOM.imagePreview.src = reader.result;
-
-      if (cropper) {
-        cropper.destroy();
-      }
-
+      if (cropper) cropper.destroy();
       cropper = new Cropper(DOM.imagePreview, {
         aspectRatio: CONFIG.cropAspectRatio,
         viewMode: 1,
@@ -442,7 +506,6 @@ window.addEventListener("DOMContentLoaded", () => {
         cropend: refreshPreviewPhotoFromCropper,
       });
     };
-
     reader.readAsDataURL(file);
   }
 
@@ -457,40 +520,22 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   function refreshPreviewPhotoFromCropper() {
-    // Keep preview and exported cards in sync with the current crop area.
     currentPreviewPhotoDataUrl = getCroppedPhotoDataUrl() || "";
     updatePreview();
   }
 
   function getPreviewCardData() {
-    const { name, ac, speed, cardWidth, masterSideOnly, holderGap, holderGapSize } =
-      getFormData();
-
-    return {
-      name,
-      ac,
-      speed,
-      cardWidth,
-      masterSideOnly,
-      holderGap,
-      holderGapSize,
-      photoDataUrl: currentPreviewPhotoDataUrl,
-    };
+    const { name, ac, speed, cardWidth, masterSideOnly, holderGap, holderGapSize } = getFormData();
+    return { name, ac, speed, cardWidth, masterSideOnly, holderGap, holderGapSize, photoDataUrl: currentPreviewPhotoDataUrl };
   }
 
   function toggleEasterEgg(name) {
-    DOM.easterEgg.style.display =
-      name === CONFIG.easterEggName ? "block" : "none";
+    DOM.easterEgg.style.display = name === CONFIG.easterEggName ? "block" : "none";
   }
 
   function getCroppedPhotoDataUrl() {
     if (!cropper) return null;
-
-    const canvas = cropper.getCroppedCanvas({
-      width: CONFIG.croppedImageWidth,
-      height: CONFIG.croppedImageHeight,
-    });
-
+    const canvas = cropper.getCroppedCanvas({ width: CONFIG.croppedImageWidth, height: CONFIG.croppedImageHeight });
     return canvas.toDataURL("image/png");
   }
 
@@ -498,105 +543,131 @@ window.addEventListener("DOMContentLoaded", () => {
     return `card-preview${card.holderGap ? " with-holder-gap" : ""}`;
   }
 
-  function getRenderedCardWidth(card) {
-    return getCardMetrics(card).widthMm;
-  }
-
+  function getRenderedCardWidth(card) { return getCardMetrics(card).widthMm; }
   function getRenderedCardHeight(card) {
     const metrics = getCardMetrics(card);
-
     return card.holderGap ? metrics.heightWithHolderMm : metrics.heightMm;
   }
 
-  function handleAddCard() {
-    const {
-      name,
-      ac,
-      speed,
-      cardWidth,
-      masterSideOnly,
-      holderGap,
-      holderGapSize,
-    } = getFormData();
-    const photoDataUrl = currentPreviewPhotoDataUrl || getCroppedPhotoDataUrl();
+  // ─────────────────────────────────────────────
+  //  Add / Save card
+  // ─────────────────────────────────────────────
 
-    cards.push({
-      name,
-      ac,
-      speed,
-      cardWidth,
-      masterSideOnly,
-      holderGap,
-      holderGapSize,
-      photoDataUrl,
-    });
+  function handleAddOrSaveCard() {
+    const { name, ac, speed, cardWidth, masterSideOnly, holderGap, holderGapSize } = getFormData();
+    const photoDataUrl = currentPreviewPhotoDataUrl || getCroppedPhotoDataUrl() || "";
+
+    const cardData = { name, ac, speed, cardWidth, masterSideOnly, holderGap, holderGapSize, photoDataUrl };
+
+    if (editingIndex !== null) {
+      // Overwrite the existing card in-place
+      cards[editingIndex] = cardData;
+      exitEditMode();
+    } else {
+      cards.push(cardData);
+    }
 
     updatePreview();
     renderCardsList();
   }
 
+  // ─────────────────────────────────────────────
+  //  Cards list rendering
+  // ─────────────────────────────────────────────
+
   function renderCardsList() {
     DOM.cardsList.innerHTML = "";
 
     if (!cards.length) {
-      DOM.cardsList.innerHTML = `
-        <span style="font-size:12px;color:#6b7280;">
-          ${CONFIG.placeholders.emptyList}
-        </span>
-      `;
+      const empty = document.createElement("span");
+      empty.className = "cards-list-empty";
+      empty.textContent = tjs("emptyList");
+      DOM.cardsList.appendChild(empty);
       return;
     }
 
     cards.forEach((card, index) => {
       const row = document.createElement("div");
-      row.className = "cards-list-item";
+      row.className = "cards-list-item" + (index === editingIndex ? " is-editing" : "");
+
+      const thumb = document.createElement("div");
+      thumb.className = "cards-list-thumb";
+      if (card.photoDataUrl) {
+        const img = document.createElement("img");
+        img.src = card.photoDataUrl;
+        img.alt = "";
+        thumb.appendChild(img);
+      } else {
+        thumb.textContent = "?";
+      }
 
       const label = document.createElement("span");
+      label.className = "cards-list-label";
       label.textContent = formatCardLabel(card);
 
       if (hasEmptyFields(card)) {
         const badge = document.createElement("span");
         badge.className = "mini-badge";
-        badge.textContent = "есть пустые поля";
+        badge.textContent = tjs("emptyFields");
         label.appendChild(badge);
       }
 
+      if (index === editingIndex) {
+        const editingBadge = document.createElement("span");
+        editingBadge.className = "mini-badge mini-badge-active";
+        editingBadge.textContent = tjs("badgeEditing");
+        label.appendChild(editingBadge);
+      }
+
+      const actions = document.createElement("div");
+      actions.className = "cards-list-actions";
+
+      const editBtn = document.createElement("button");
+      editBtn.className = "btn btn-ghost btn-icon";
+      editBtn.title = currentLang === "ru" ? "Редактировать" : "Edit";
+      editBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+      editBtn.addEventListener("click", () => enterEditMode(index));
+
       const removeBtn = document.createElement("button");
-      removeBtn.className = "btn btn-ghost";
-      removeBtn.style.padding = "4px 10px";
-      removeBtn.style.fontSize = "11px";
-      removeBtn.textContent = "Удалить";
+      removeBtn.className = "btn btn-ghost btn-icon btn-icon-danger";
+      removeBtn.title = currentLang === "ru" ? "Удалить" : "Delete";
+      removeBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
       removeBtn.addEventListener("click", () => removeCard(index));
 
-      row.append(label, removeBtn);
+      actions.append(editBtn, removeBtn);
+      row.append(thumb, label, actions);
       DOM.cardsList.appendChild(row);
     });
   }
 
   function formatCardLabel(card) {
-    const sideLabel = card.masterSideOnly ? " | одна сторона" : "";
-    const sizeLabel = ` | ${formatMetricNumber(
-      card.cardWidth ?? CONFIG.card.baseWidth
-    )} мм`;
+    const dash = tjs("labelDash");
+    const sideLabel = card.masterSideOnly ? tjs("oneSide") : "";
+    const sizeLabel = ` · ${formatMetricNumber(card.cardWidth ?? CONFIG.card.baseWidth)}${tjs("mmSuffix")}`;
     const holderGapLabel = card.holderGap
-      ? ` | держатель ${formatMetricNumber(
-          card.holderGapSize ?? CONFIG.card.baseHolderGapMm
-        )} мм`
+      ? tjs("holderSuffix", formatMetricNumber(card.holderGapSize ?? CONFIG.card.baseHolderGapMm))
       : "";
-
-    return `${card.name || "Без имени"} | КД ${card.ac || "—"} | Скорость ${
-      card.speed || "—"
-    }${sizeLabel}${sideLabel}${holderGapLabel}`;
+    const unnamed = tjs("unnamed");
+    return `${card.name || unnamed} · ${t("labelAC")} ${card.ac || dash} · ${t("labelSpeed")} ${card.speed || dash}${sizeLabel}${sideLabel}${holderGapLabel}`;
   }
 
-  function hasEmptyFields(card) {
-    return !card.name || !card.ac || !card.speed;
-  }
+  function hasEmptyFields(card) { return !card.name || !card.ac || !card.speed; }
 
-  function removeCard(index) {
+  function toggleEasterEgg(name) {
+    DOM.easterEgg.style.display = CONFIG.easterEggNames.includes(name) ? "block" : "none";
+  }
+    // If we're editing the card that's being deleted, cancel edit mode first
+    if (editingIndex === index) exitEditMode();
+    // If deleted card is before the editing index, shift the index down
+    else if (editingIndex !== null && index < editingIndex) editingIndex--;
+
     cards.splice(index, 1);
     renderCardsList();
   }
+
+  // ─────────────────────────────────────────────
+  //  Clear form
+  // ─────────────────────────────────────────────
 
   function handleClearForm() {
     DOM.nameInput.value = "";
@@ -606,19 +677,30 @@ window.addEventListener("DOMContentLoaded", () => {
     DOM.masterSideOnlyInput.checked = false;
     DOM.holderGapInput.checked = false;
     DOM.holderGapSizeInput.value = CONFIG.card.baseHolderGapMm;
-
-    updatePreview();
+    currentPreviewPhotoDataUrl = "";
+    DOM.imageInput.value = "";
 
     if (cropper) {
-      cropper.clear();
+      cropper.destroy();
+      cropper = null;
     }
+    DOM.imagePreview.src = "";
+
+    updatePreview();
   }
+
+  // ─────────────────────────────────────────────
+  //  PDF export
+  // ─────────────────────────────────────────────
 
   async function handleDownloadPdf() {
     if (!cards.length) {
-      alert("Добавьте хотя бы одну карточку в лист.");
+      alert(tjs("noCards"));
       return;
     }
+
+    await ensureHtml2canvas();
+    await ensureJsPdf();
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({
@@ -633,32 +715,17 @@ window.addEventListener("DOMContentLoaded", () => {
     const pages = buildPdfPages(cards, pageWidth, pageHeight, layout);
 
     for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
-      if (pageIndex > 0) {
-        doc.addPage();
-      }
+      if (pageIndex > 0) doc.addPage();
 
       const page = pages[pageIndex];
-      let currentY = getCenteredOffset(
-        pageHeight,
-        page.contentHeight,
-        layout.startY
-      );
+      let currentY = getCenteredOffset(pageHeight, page.contentHeight, layout.startY);
 
       for (const row of page.rows) {
         let currentX = getCenteredOffset(pageWidth, row.width, layout.startX);
 
         for (const cardEntry of row.cards) {
           const imgData = await renderCardToDataUrl(cardEntry.card);
-
-          doc.addImage(
-            imgData,
-            "PNG",
-            currentX,
-            currentY,
-            cardEntry.width,
-            cardEntry.height
-          );
-
+          doc.addImage(imgData, "PNG", currentX, currentY, cardEntry.width, cardEntry.height);
           currentX += cardEntry.width + layout.gapX;
         }
 
@@ -670,49 +737,36 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   async function renderCardToDataUrl(card) {
+    await ensureHtml2canvas();
     const temp = document.createElement("div");
-
     temp.className = `${buildCardPreviewClassName(card)} card-preview-export`;
     applyCardMetricsToElement(temp, card);
     temp.style.position = "fixed";
     temp.style.left = "-10000px";
     temp.style.top = "0";
-    // Render off-screen so html2canvas captures the same markup as the live preview.
     temp.innerHTML = buildCardMarkup(card);
 
     document.body.appendChild(temp);
-
-    const canvas = await html2canvas(temp, {
-      backgroundColor: "#ffffff",
-      scale: 2,
-    });
-
+    const canvas = await html2canvas(temp, { backgroundColor: "#ffffff", scale: 2 });
     document.body.removeChild(temp);
 
     return canvas.toDataURL("image/png");
   }
 
+  // ─────────────────────────────────────────────
+  //  Card markup builders
+  // ─────────────────────────────────────────────
+
   function buildCardMarkup(card) {
     const detailsOnlyOnOneSide = Boolean(card.masterSideOnly);
     const hiddenDetailsCard = detailsOnlyOnOneSide
-      ? {
-          // Leave the structure visible for handwriting while keeping entered values
-          // only on the master's side of the card.
-          ...card,
-          name: "",
-          ac: "",
-          speed: "",
-        }
+      ? { ...card, name: "", ac: "", speed: "" }
       : card;
 
     return `
       <div class="card-cut-line"></div>
-      <div class="card-half top">
-        ${buildCardHalfMarkup(hiddenDetailsCard)}
-      </div>
-      <div class="card-half bottom">
-        ${buildCardHalfMarkup(card)}
-      </div>
+      <div class="card-half top">${buildCardHalfMarkup(hiddenDetailsCard)}</div>
+      <div class="card-half bottom">${buildCardHalfMarkup(card)}</div>
     `;
   }
 
@@ -721,60 +775,41 @@ window.addEventListener("DOMContentLoaded", () => {
     const safePhotoUrl = escapeHtml(card.photoDataUrl || "");
     const photoMarkup = safePhotoUrl
       ? `<img src="${safePhotoUrl}" alt="Фото персонажа" />`
-      : `<span class="card-photo-placeholder">${CONFIG.placeholders.photo}</span>`;
+      : `<span class="card-photo-placeholder">${CONFIG.placeholders.photo()}</span>`;
 
     return `
       <div class="card-half-content">
-        <div class="card-photo">
-          ${photoMarkup}
-        </div>
-        <div class="card-name${card.name ? "" : " empty"}">
-          ${safeName || CONFIG.placeholders.name}
-        </div>
+        <div class="card-photo">${photoMarkup}</div>
+        <div class="card-name${card.name ? "" : " empty"}">${safeName || CONFIG.placeholders.name()}</div>
         <div class="card-stats">
           ${buildStatMarkup("shield", card.ac, CONFIG.icons.ac)}
           ${buildStatMarkup("speed", card.speed, CONFIG.icons.speed)}
         </div>
       </div>
-      ${
-        // Extra tail is added without shrinking the content area of the card.
-        card.holderGap
-          ? `<div class="card-bottom-gap" aria-hidden="true"></div>`
-          : ""
-      }
+      ${card.holderGap ? `<div class="card-bottom-gap" aria-hidden="true"></div>` : ""}
     `;
   }
 
   function buildStatMarkup(className, value, iconSrc) {
     const hasValue = Boolean(value);
-
     return `
       <div class="${className}${hasValue ? "" : " stat-empty"}">
-        ${
-          // Empty stats keep the icon shape so the user can fill values by hand later.
-          hasValue
-            ? `<span>${escapeHtml(value)}</span>${iconSrc}`
-            : `<span>${escapeHtml()}</span>${iconSrc}`
+        ${hasValue
+          ? `<span>${escapeHtml(value)}</span>${iconSrc}`
+          : `<span></span>${iconSrc}`
         }
       </div>
     `;
   }
 
-  function clampNumber(value, min, max) {
-    return Math.min(Math.max(value, min), max);
-  }
+  // ─────────────────────────────────────────────
+  //  Utilities
+  // ─────────────────────────────────────────────
 
-  function formatMillimeters(value) {
-    return `${Number.parseFloat(value.toFixed(2))}mm`;
-  }
-
-  function formatPixels(value) {
-    return `${Number.parseFloat(value.toFixed(2))}px`;
-  }
-
-  function formatMetricNumber(value) {
-    return String(Number.parseFloat(value.toFixed(2)));
-  }
+  function clampNumber(value, min, max) { return Math.min(Math.max(value, min), max); }
+  function formatMillimeters(value) { return `${Number.parseFloat(value.toFixed(2))}mm`; }
+  function formatPixels(value) { return `${Number.parseFloat(value.toFixed(2))}px`; }
+  function formatMetricNumber(value) { return String(Number.parseFloat(value.toFixed(2))); }
 
   function escapeHtml(value = "") {
     return String(value)

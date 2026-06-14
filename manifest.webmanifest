@@ -1,0 +1,28 @@
+{
+  "name": "D&D трекер инициативы",
+  "short_name": "DnD Tracker",
+  "description": "Генератор карточек инициативы D&D для печати",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1510",
+  "theme_color": "#1a1510",
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "favicon-32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "favicon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
