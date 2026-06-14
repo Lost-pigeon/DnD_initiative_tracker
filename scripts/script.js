@@ -230,7 +230,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function enterEditMode(index) {
+  async function enterEditMode(index) {
     editingIndex = index;
     const card = cards[index];
 
@@ -244,12 +244,31 @@ window.addEventListener("DOMContentLoaded", () => {
 
     currentPreviewPhotoDataUrl = card.photoDataUrl || "";
 
+    // Уничтожаем старый cropper
     if (cropper) {
       cropper.destroy();
       cropper = null;
     }
-    DOM.imagePreview.src = "";
     DOM.imageInput.value = "";
+
+    // Если у карточки есть фото — загружаем его обратно в cropper
+    if (card.photoDataUrl) {
+      await ensureCropper();
+      DOM.imagePreview.src = card.photoDataUrl;
+      // Ждём загрузки изображения перед инициализацией Cropper
+      await new Promise(resolve => {
+        if (DOM.imagePreview.complete) { resolve(); return; }
+        DOM.imagePreview.onload = resolve;
+      });
+      cropper = new Cropper(DOM.imagePreview, {
+        aspectRatio: CONFIG.cropAspectRatio,
+        viewMode: 1,
+        ready: refreshPreviewPhotoFromCropper,
+        cropend: refreshPreviewPhotoFromCropper,
+      });
+    } else {
+      DOM.imagePreview.src = "";
+    }
 
     DOM.addCardBtn.classList.add("btn-editing");
     DOM.editBannerName.textContent = card.name || tjs("unnamed");
@@ -530,7 +549,7 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   function toggleEasterEgg(name) {
-    DOM.easterEgg.style.display = name === CONFIG.easterEggName ? "block" : "none";
+    DOM.easterEgg.style.display = CONFIG.easterEggNames.includes(name) ? "block" : "none";
   }
 
   function getCroppedPhotoDataUrl() {
@@ -653,9 +672,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   function hasEmptyFields(card) { return !card.name || !card.ac || !card.speed; }
 
-  function toggleEasterEgg(name) {
-    DOM.easterEgg.style.display = CONFIG.easterEggNames.includes(name) ? "block" : "none";
-  }
+  function removeCard(index) {
     // If we're editing the card that's being deleted, cancel edit mode first
     if (editingIndex === index) exitEditMode();
     // If deleted card is before the editing index, shift the index down
