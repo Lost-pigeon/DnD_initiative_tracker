@@ -39,6 +39,8 @@
 
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; }
+/* Гарантируем что hidden не перебивается CSS display правилами */
+[hidden] { display: none !important; }
 html { color-scheme: dark; scroll-behavior: smooth; }
 
 body {
@@ -130,7 +132,7 @@ h1 {
   max-width: 560px;
   margin: 0 auto;
   font-size: 14px;
-  color: var(--mist);
+  color: var(--parchment-dark);
   line-height: 1.7;
 }
 

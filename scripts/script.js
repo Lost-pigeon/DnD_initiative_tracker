@@ -159,6 +159,8 @@ window.addEventListener("DOMContentLoaded", () => {
   let currentPreviewPhotoDataUrl = "";
   // null = create mode; number = index of card being edited
   let editingIndex = null;
+  // Оригинал (до кадрирования) — нужен для повторного редактирования кропа
+  let currentOriginalPhotoDataUrl = "";
 
   init();
 
@@ -243,6 +245,7 @@ window.addEventListener("DOMContentLoaded", () => {
     DOM.holderGapSizeInput.value = formatMetricNumber(card.holderGapSize ?? CONFIG.card.baseHolderGapMm);
 
     currentPreviewPhotoDataUrl = card.photoDataUrl || "";
+    currentOriginalPhotoDataUrl = card.originalPhotoDataUrl || card.photoDataUrl || "";
 
     // Уничтожаем старый cropper
     if (cropper) {
@@ -251,11 +254,11 @@ window.addEventListener("DOMContentLoaded", () => {
     }
     DOM.imageInput.value = "";
 
-    // Если у карточки есть фото — загружаем его обратно в cropper
-    if (card.photoDataUrl) {
+    // Загружаем оригинал (до кадрирования) — чтобы можно было поменять область кропа
+    const sourceForCropper = currentOriginalPhotoDataUrl;
+    if (sourceForCropper) {
       await ensureCropper();
-      DOM.imagePreview.src = card.photoDataUrl;
-      // Ждём загрузки изображения перед инициализацией Cropper
+      DOM.imagePreview.src = sourceForCropper;
       await new Promise(resolve => {
         if (DOM.imagePreview.complete) { resolve(); return; }
         DOM.imagePreview.onload = resolve;
@@ -507,6 +510,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   async function handleImageChange(event) {
     currentPreviewPhotoDataUrl = "";
+    currentOriginalPhotoDataUrl = "";
     updatePreview();
 
     const file = event.target.files?.[0];
@@ -516,6 +520,8 @@ window.addEventListener("DOMContentLoaded", () => {
 
     const reader = new FileReader();
     reader.onload = () => {
+      // Сохраняем оригинал до кадрирования
+      currentOriginalPhotoDataUrl = reader.result;
       DOM.imagePreview.src = reader.result;
       if (cropper) cropper.destroy();
       cropper = new Cropper(DOM.imagePreview, {
@@ -575,11 +581,12 @@ window.addEventListener("DOMContentLoaded", () => {
   function handleAddOrSaveCard() {
     const { name, ac, speed, cardWidth, masterSideOnly, holderGap, holderGapSize } = getFormData();
     const photoDataUrl = currentPreviewPhotoDataUrl || getCroppedPhotoDataUrl() || "";
+    // Сохраняем оригинал — он нужен для повторного редактирования кропа
+    const originalPhotoDataUrl = currentOriginalPhotoDataUrl || photoDataUrl;
 
-    const cardData = { name, ac, speed, cardWidth, masterSideOnly, holderGap, holderGapSize, photoDataUrl };
+    const cardData = { name, ac, speed, cardWidth, masterSideOnly, holderGap, holderGapSize, photoDataUrl, originalPhotoDataUrl };
 
     if (editingIndex !== null) {
-      // Overwrite the existing card in-place
       cards[editingIndex] = cardData;
       exitEditMode();
     } else {
@@ -695,6 +702,7 @@ window.addEventListener("DOMContentLoaded", () => {
     DOM.holderGapInput.checked = false;
     DOM.holderGapSizeInput.value = CONFIG.card.baseHolderGapMm;
     currentPreviewPhotoDataUrl = "";
+    currentOriginalPhotoDataUrl = "";
     DOM.imageInput.value = "";
 
     if (cropper) {
