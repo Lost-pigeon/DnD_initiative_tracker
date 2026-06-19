@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+  <!-- ══════════════════════════════════════════════════════════════
+       Базовые мета-теги: кодировка, вьюпорт, заголовок, описание.
+       Текст внутри data-i18n атрибутов ниже по файлу — это значения
+       по умолчанию (русский); реальный язык подставляет script.js
+       при загрузке через applyTranslations() (см. scripts/i18n.js).
+       ══════════════════════════════════════════════════════════════ -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>D&amp;D трекер инициативы — генератор карточек для печати</title>
@@ -13,12 +19,19 @@
   <meta name="yandex-verification" content="4a80631d098609e1" />
   <link rel="canonical" href="https://lostpigeon.ru/" />
 
+  <!-- Иконки сайта для разных платформ (вкладка браузера, iOS, PWA) -->
   <link rel="icon" href="favicon.svg" sizes="any" type="image/svg+xml" />
   <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="sitemap" type="application/xml" title="Sitemap" href="https://lostpigeon.ru/sitemap.xml" />
 
+  <!-- ══════════════════════════════════════════════════════════════
+       Шрифты Google Fonts (Cinzel — заголовки, Inter — интерфейс).
+       Загружаются неблокирующим способом: media="print" + onload
+       переключает media на "all" уже после загрузки, поэтому шрифты
+       не задерживают первый рендер страницы (FCP).
+       ══════════════════════════════════════════════════════════════ -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
@@ -26,6 +39,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Inter:wght@400;500;600&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Inter:wght@400;500;600&display=swap" /></noscript>
 
+  <!-- Open Graph — превью при шаринге в соцсетях и мессенджерах -->
   <meta property="og:locale" content="ru_RU" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="D&amp;D трекер инициативы — генератор карточек для печати" />
@@ -37,11 +51,13 @@
   <meta property="og:image:height" content="630" />
   <meta property="og:image:alt" content="D&amp;D трекер инициативы — генератор карточек инициативы для печати" />
 
+  <!-- Twitter / X Card -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="D&amp;D трекер инициативы — генератор карточек для печати" />
   <meta name="twitter:description" content="Онлайн-генератор карточек инициативы D&amp;D с экспортом в PDF, настройкой размеров и режимом карточек для мастера. Бесплатно." />
   <meta name="twitter:image" content="https://lostpigeon.ru/og-image.png" />
 
+  <!-- Структурированные данные Schema.org для поисковиков (Google, Яндекс) -->
   <script type="application/ld+json">
   [
     {
@@ -65,15 +81,25 @@
   ]
   </script>
 
+  <!--
+    CropperJS подключается тегом <link> для стилей сразу (они лёгкие),
+    но сам JS грузится лениво из script.js только при выборе фото —
+    см. ensureCropper() / CDN_URLS в scripts/script.js.
+    Аналогично html2canvas и jsPDF подгружаются лениво при экспорте PDF.
+  -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css" />
   <link rel="stylesheet" href="style.css" />
+
+  <!-- i18n.js должен загрузиться до script.js — словарь переводов нужен сразу при инициализации -->
   <script src="scripts/i18n.js"></script>
   <script src="scripts/script.js" defer></script>
 </head>
 <body>
   <main class="page">
 
-    <!-- Hero -->
+    <!-- ══════════════════════════════════════════════════════════
+         HERO: заголовок, подзаголовок, переключатель языка ru/en
+         ══════════════════════════════════════════════════════════ -->
     <header class="hero">
       <button class="lang-toggle" id="langToggle" title="Switch to English" aria-label="Switch to English">
         <span data-i18n="langToggleLabel">EN</span>
@@ -92,15 +118,26 @@
     <div class="app-card">
       <div class="layout">
 
-        <!-- Left column -->
+        <!-- ════════════════════════════════════════════════════════
+             ЛЕВАЯ КОЛОНКА: форма создания/редактирования карточки
+             и список уже добавленных карточек
+             ════════════════════════════════════════════════════════ -->
         <section aria-labelledby="form-title">
           <h2 class="section-title" id="form-title" data-i18n="sectionCharacter">Данные персонажа</h2>
 
+          <!--
+            Баннер режима редактирования. По умолчанию скрыт атрибутом hidden;
+            показывается через JS (DOM.editBanner.hidden = false) когда
+            пользователь нажимает «Редактировать» у карточки в списке.
+            Размещён над полем фото, чтобы сразу было видно, что форма
+            сейчас не создаёт новую карточку, а правит существующую.
+          -->
           <div id="editBanner" class="edit-banner" hidden>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             <span data-i18n="editBannerPrefix">Редактирование:</span> <strong id="editBannerName"></strong>
           </div>
 
+          <!-- Загрузка и кадрирование портрета (CropperJS инициализируется в script.js) -->
           <div>
             <label for="imageInput" data-i18n="labelPortrait">Портрет персонажа</label>
             <input type="file" id="imageInput" class="file-input" accept="image/*" />
@@ -111,6 +148,7 @@
             <img id="imagePreview" data-i18n-attr="alt:imagePreviewAlt" alt="Предпросмотр портрета персонажа" />
           </div>
 
+          <!-- Основные характеристики: имя, класс доспеха, скорость -->
           <div class="field-row">
             <div>
               <label for="nameInput" data-i18n="labelName">Имя</label>
@@ -126,31 +164,41 @@
             </div>
           </div>
 
+          <!-- Ширина карточки 20–50 мм — от неё масштабируются все остальные размеры (см. getCardScale в JS) -->
           <div class="size-control">
             <label for="cardWidthInput" data-i18n="labelCardWidth">Ширина карточки (мм)</label>
             <input type="number" id="cardWidthInput" min="20" max="50" step="1" value="35" />
             <div class="hint" id="cardSizeHint">Высота карточки: 120 мм, с держателем: 140 мм.</div>
           </div>
 
+          <!-- Режим мастера: характеристики только на одной стороне карточки -->
           <label class="toggle-row" for="masterSideOnlyInput">
             <input type="checkbox" id="masterSideOnlyInput" />
             <span data-i18n="labelMasterOnly">Имя, КД и скорость только на одной стороне</span>
           </label>
           <div class="hint" data-i18n="hintMasterOnly">Когда включено, вторая сторона остаётся пустой для ручного заполнения.</div>
 
+          <!-- Дополнительное поле снизу карточки под подставку-держатель -->
           <label class="toggle-row" for="holderGapInput">
             <input type="checkbox" id="holderGapInput" />
             <span data-i18n="labelHolderGap">Добавить пустой край снизу для держателя</span>
           </label>
           <div class="hint" data-i18n="hintHolderGap">Добавляет поле для вставки в подставку-держатель.</div>
 
+          <!-- Видимость этого блока переключается через JS вместе с чекбоксом выше -->
           <div class="size-control" id="holderGapSizeControl" hidden>
             <label for="holderGapSizeInput" data-i18n="labelHolderSize">Размер поля для держателя (мм)</label>
             <input type="number" id="holderGapSizeInput" min="0" max="30" step="1" value="10" />
           </div>
 
+          <!-- Пасхалка: появляется при вводе имени «Иваныч» / «Ivanich», см. EASTER_EGG_NAMES -->
           <div id="easterEgg" class="easter-egg" data-i18n="easterEgg">✦ Золотая легендарная карта! ✦</div>
 
+          <!--
+            Кнопка «Добавить в лист» меняет текст на «Сохранить изменения»
+            и подсвечивается красным в режиме редактирования (см. syncEditModeUI).
+            «Отмена» видна только в режиме редактирования.
+          -->
           <div class="buttons-row">
             <button class="btn btn-primary" id="addCardBtn" data-i18n="btnAdd">Добавить в лист</button>
             <button class="btn btn-ghost" id="clearFormBtn" data-i18n="btnClear">Сбросить форму</button>
@@ -161,14 +209,18 @@
             Пустое имя оставит линию для ручного вписывания. Незаполненные КД и скорость сохранят иконки пустыми.
           </div>
 
+          <!-- Список добавленных карточек заполняется через renderCardsList() в JS -->
           <h2 class="section-title section-title-spaced" id="list-title" data-i18n="sectionList">Карточки в листе</h2>
           <div class="cards-list" id="cardsList" aria-live="polite"></div>
         </section>
 
-        <!-- Right column -->
+        <!-- ════════════════════════════════════════════════════════
+             ПРАВАЯ КОЛОНКА: живое превью карточки и экспорт в PDF
+             ════════════════════════════════════════════════════════ -->
         <section aria-labelledby="preview-title">
           <h2 class="section-title" id="preview-title" data-i18n="sectionPreview">Превью карточки</h2>
           <div class="preview-wrapper">
+            <!-- Содержимое генерируется функцией buildCardMarkup() в script.js -->
             <div class="card-preview" id="cardPreview"></div>
           </div>
 

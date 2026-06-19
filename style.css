@@ -1,27 +1,67 @@
-/* ── Token system ── */
-:root {
-  --ink:        #1a1510;
-  --ink-light:  #2d2318;
-  --parchment:  #f0e6d0;
-  --parchment-dark: #e0d0b0;
-  --gold:       #c9a84c;
-  --gold-dim:   #8a6f2e;
-  --crimson:    #7a1f1f;
-  --crimson-dim:#5a1515;
-  --mist:       #6b5f4e;
-  --surface:    #221c13;
-  --surface-2:  #2d2318;
-  --border:     rgba(201,168,76,0.25);
-  --border-strong: rgba(201,168,76,0.55);
+/**
+ * D&D Initiative Tracker — стили интерфейса.
+ *
+ * Концепция: «тёмный манускрипт» — тёмный пергаментный фон, золото и
+ * тёмно-красный как акценты, шрифт Cinzel для заголовков (как на гравюрах
+ * в изданиях D&D), Inter для интерфейса.
+ *
+ * Вся геометрия самой карточки (ширина, высота, отступы, размер иконок)
+ * управляется через CSS Custom Properties --card-*. Их значения на лету
+ * пересчитывает и записывает script.js (см. applyCardMetricsToElement),
+ * поэтому в самих правилах ниже встречаются только переменные, а не
+ * фиксированные миллиметры/пиксели.
+ *
+ * Структура файла (сверху вниз):
+ *   1. Цветовые и размерные токены
+ *   2. Сброс и базовые стили
+ *   3. Общий каркас страницы (.page, .app-card, .layout)
+ *   4. Hero-секция (заголовок, переключатель языка)
+ *   5. Заголовки секций формы
+ *   6. Поля формы (текст, число, файл)
+ *   7. Кадрирование фото (CropperJS)
+ *   8. Группы полей, переключатели, подсказки
+ *   9. Кнопки
+ *  10. Баннер режима редактирования
+ *  11. Список добавленных карточек
+ *  12. Пасхалка и предупреждение noscript
+ *  13. Колонка превью карточки
+ *  14. Блок печати
+ *  15. Внутренняя разметка самой карточки (фото/имя/статы)
+ *  16. Адаптивная вёрстка
+ */
 
-  /* card size tokens (same as before) */
+/* ══════════════════════════════════════════════════════════════════
+   1. ЦВЕТОВЫЕ И РАЗМЕРНЫЕ ТОКЕНЫ
+   ══════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Палитра «тёмный манускрипт» */
+  --ink:            #1a1510; /* основной фон страницы */
+  --ink-light:      #2d2318; /* фон полей ввода */
+  --parchment:      #f0e6d0; /* основной текст */
+  --parchment-dark: #e0d0b0; /* вторичный текст (контрастнее, чем --mist) */
+  --gold:           #c9a84c; /* акцентный цвет: заголовки, рамки, кнопка добавить */
+  --gold-dim:       #8a6f2e; /* приглушённое золото: декор, hover-состояния */
+  --crimson:        #7a1f1f; /* акцент загрузки фото и режима редактирования */
+  --crimson-dim:    #5a1515;
+  --mist:           #6b5f4e; /* приглушённый текст: лейблы, подписи */
+  --surface:        #221c13; /* фон основной панели приложения */
+  --surface-2:      #2d2318;
+  --border:         rgba(201,168,76,0.25);
+  --border-strong:  rgba(201,168,76,0.55);
+
+  /*
+   * Размеры карточки по умолчанию (ширина 35 мм).
+   * Это значения «на старте», до того как JS пересчитает их под
+   * выбранную пользователем ширину — см. applyCardMetricsToElement в script.js.
+   */
   --card-width: 35mm;
   --card-height: 120mm;
-  --card-height-holder: 140mm;
-  --card-cut-line-top: 60mm;
+  --card-height-holder: 140mm;       /* высота с учётом поля под держатель */
+  --card-cut-line-top: 60mm;          /* положение линии сгиба пополам */
   --card-cut-line-top-holder: 70mm;
-  --card-half-content-height: 60mm;
-  --card-gap-height: 10mm;
+  --card-half-content-height: 60mm;   /* высота контентной зоны одной половины */
+  --card-gap-height: 10mm;            /* высота поля под держатель */
   --card-photo-font-size: 10px;
   --card-photo-padding: 8px;
   --card-name-min-height: 14px;
@@ -33,14 +73,24 @@
   --card-stats-gap: 10px;
   --card-stats-padding-x: 8px;
   --card-stats-padding-bottom: 6px;
-  --card-stat-size: 12mm;
-  --card-stat-offset: -0.5mm;
+  --card-stat-size: 12mm;             /* диаметр/сторона иконки КД и скорости */
+  --card-stat-offset: -0.5mm;         /* вертикальная коррекция текста внутри иконки */
 }
 
-/* ── Reset ── */
+/* ══════════════════════════════════════════════════════════════════
+   2. СБРОС И БАЗОВЫЕ СТИЛИ
+   ══════════════════════════════════════════════════════════════════ */
+
 *, *::before, *::after { box-sizing: border-box; }
-/* Гарантируем что hidden не перебивается CSS display правилами */
+
+/*
+ * Без этого правила атрибут [hidden] перебивается любым CSS-правилом
+ * с явным display (например, .btn { display: inline-flex }), и скрытые
+ * через JS элементы (баннер редактирования, кнопка «Отмена» и т.п.)
+ * всё равно остаются видимыми.
+ */
 [hidden] { display: none !important; }
+
 html { color-scheme: dark; scroll-behavior: smooth; }
 
 body {
@@ -51,6 +101,7 @@ body {
   line-height: 1.6;
   color: var(--parchment);
   background: var(--ink);
+  /* Тёплое свечение сверху + лёгкий шум для текстуры пергамента */
   background-image:
     radial-gradient(ellipse 80% 60% at 50% 0%, #2d200a 0%, transparent 70%),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
@@ -58,7 +109,10 @@ body {
 
 img { max-width: 100%; }
 
-/* ── Layout ── */
+/* ══════════════════════════════════════════════════════════════════
+   3. ОБЩИЙ КАРКАС СТРАНИЦЫ
+   ══════════════════════════════════════════════════════════════════ */
+
 .page {
   width: 100%;
   max-width: 1160px;
@@ -66,42 +120,66 @@ img { max-width: 100%; }
   padding: 32px 24px 64px;
 }
 
-/* ── Language toggle ── */
-.lang-toggle {
-  position: absolute;
-  top: 0;
-  right: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 14px;
+/* Основная панель приложения — «свиток» с двумя колонками внутри */
+.app-card {
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--gold-dim);
-  font-family: 'Inter', sans-serif;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(201,168,76,0.08),
+    0 40px 80px rgba(0,0,0,0.6),
+    inset 0 1px 0 rgba(201,168,76,0.15);
+  position: relative;
 }
 
-.lang-toggle:hover {
-  border-color: var(--border-strong);
-  color: var(--gold);
-  background: rgba(201,168,76,0.06);
+/* Декоративные уголки в духе старинных гравюр */
+.app-card::before, .app-card::after {
+  content: '';
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-color: var(--gold-dim);
+  border-style: solid;
+  opacity: 0.4;
+  pointer-events: none;
+}
+.app-card::before {
+  top: 12px; left: 12px;
+  border-width: 2px 0 0 2px;
+  border-radius: 4px 0 0 0;
+}
+.app-card::after {
+  bottom: 12px; right: 12px;
+  border-width: 0 2px 2px 0;
+  border-radius: 0 0 4px 0;
 }
 
-/* hero needs relative for absolute button */
-.hero { position: relative; }
+/* Двухколоночная раскладка: форма слева, превью и печать справа */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 0;
+}
 
+.layout > section:first-child {
+  padding: 28px 32px 32px;
+  border-right: 1px solid var(--border);
+}
+
+.layout > section:last-child {
+  padding: 28px 28px 32px;
+  background: rgba(0,0,0,0.15);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   4. HERO-СЕКЦИЯ
+   ══════════════════════════════════════════════════════════════════ */
 
 .hero {
+  position: relative; /* нужно для абсолютно спозиционированной кнопки языка */
   text-align: center;
   padding: 48px 16px 40px;
-  position: relative;
 }
 
 .hero::before, .hero::after {
@@ -132,63 +210,42 @@ h1 {
   max-width: 560px;
   margin: 0 auto;
   font-size: 14px;
-  color: var(--parchment-dark);
+  color: var(--parchment-dark); /* контрастнее --mist, текст важно читать сразу */
   line-height: 1.7;
 }
 
-/* ── Main scroll panel ── */
-.app-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  overflow: hidden;
-  box-shadow:
-    0 0 0 1px rgba(201,168,76,0.08),
-    0 40px 80px rgba(0,0,0,0.6),
-    inset 0 1px 0 rgba(201,168,76,0.15);
-  position: relative;
-}
-
-/* Corner ornaments */
-.app-card::before, .app-card::after {
-  content: '';
+/* Кнопка переключения языка ru/en — в правом верхнем углу hero */
+.lang-toggle {
   position: absolute;
-  width: 40px;
-  height: 40px;
-  border-color: var(--gold-dim);
-  border-style: solid;
-  opacity: 0.4;
-  pointer-events: none;
-}
-.app-card::before {
-  top: 12px; left: 12px;
-  border-width: 2px 0 0 2px;
-  border-radius: 4px 0 0 0;
-}
-.app-card::after {
-  bottom: 12px; right: 12px;
-  border-width: 0 2px 2px 0;
-  border-radius: 0 0 4px 0;
-}
-
-/* ── Two-column layout ── */
-.layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-  gap: 0;
+  top: 0;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gold-dim);
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
-.layout > section:first-child {
-  padding: 28px 32px 32px;
-  border-right: 1px solid var(--border);
+.lang-toggle:hover {
+  border-color: var(--border-strong);
+  color: var(--gold);
+  background: rgba(201,168,76,0.06);
 }
 
-.layout > section:last-child {
-  padding: 28px 28px 32px;
-  background: rgba(0,0,0,0.15);
-}
+/* ══════════════════════════════════════════════════════════════════
+   5. ЗАГОЛОВКИ СЕКЦИЙ ФОРМЫ
+   ══════════════════════════════════════════════════════════════════ */
 
-/* ── Section titles ── */
 .section-title {
   font-family: 'Cinzel', serif;
   font-size: 11px;
@@ -202,6 +259,7 @@ h1 {
   gap: 10px;
 }
 
+/* Затухающая линия-хвост справа от заголовка секции */
 .section-title::after {
   content: '';
   flex: 1;
@@ -211,7 +269,10 @@ h1 {
 
 .section-title-spaced { margin-top: 28px; }
 
-/* ── Labels ── */
+/* ══════════════════════════════════════════════════════════════════
+   6. ПОЛЯ ФОРМЫ
+   ══════════════════════════════════════════════════════════════════ */
+
 label {
   display: block;
   margin-bottom: 5px;
@@ -222,7 +283,6 @@ label {
   color: var(--mist);
 }
 
-/* ── Inputs ── */
 input[type="text"],
 input[type="number"] {
   width: 100%;
@@ -245,6 +305,7 @@ input[type="number"]:focus {
   box-shadow: 0 0 0 2px rgba(201,168,76,0.15);
 }
 
+/* Используется для disabled-состояния поля размера держателя */
 input[type="text"]:disabled,
 input[type="number"]:disabled {
   background: #1a1510;
@@ -252,7 +313,7 @@ input[type="number"]:disabled {
   cursor: not-allowed;
 }
 
-/* ── File input ── */
+/* Кастомная кнопка «Выбрать файл» в красном акценте */
 input[type="file"] {
   width: 100%;
   padding: 8px 10px;
@@ -288,7 +349,10 @@ input[type="file"]::file-selector-button:hover {
   box-shadow: 0 6px 16px rgba(122,31,31,0.5);
 }
 
-/* ── Crop container ── */
+/* ══════════════════════════════════════════════════════════════════
+   7. КАДРИРОВАНИЕ ФОТО (CropperJS)
+   ══════════════════════════════════════════════════════════════════ */
+
 .crop-container {
   display: flex;
   align-items: center;
@@ -301,13 +365,19 @@ input[type="file"]::file-selector-button:hover {
   background: var(--ink);
 }
 
+/* CropperJS подменяет это изображение своей разметкой после инициализации,
+   но базовые ограничения размера остаются актуальны и до неё */
 #imagePreview {
   display: block;
   max-width: 100%;
   max-height: 280px;
 }
 
-/* ── Field row ── */
+/* ══════════════════════════════════════════════════════════════════
+   8. ГРУППЫ ПОЛЕЙ, ПЕРЕКЛЮЧАТЕЛИ, ПОДСКАЗКИ
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Имя / КД / Скорость в одну строку, имя — в два раза шире остальных */
 .field-row {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr;
@@ -315,13 +385,12 @@ input[type="file"]::file-selector-button:hover {
   margin-top: 10px;
 }
 
-/* ── Size control ── */
 .size-control {
   max-width: 220px;
   margin-top: 14px;
 }
 
-/* ── Toggle / checkbox row ── */
+/* Кастомный чекбокс «Имя/КД/скорость только на одной стороне» и «Держатель» */
 .toggle-row {
   display: inline-flex;
   align-items: center;
@@ -350,6 +419,7 @@ input[type="file"]::file-selector-button:hover {
   border-color: var(--crimson);
 }
 
+/* Галочка рисуется псевдоэлементом, а не через нативный appearance */
 .toggle-row input[type="checkbox"]:checked::after {
   content: '';
   position: absolute;
@@ -367,15 +437,17 @@ input[type="file"]::file-selector-button:hover {
   line-height: 1.4;
 }
 
-/* ── Hint text ── */
 .hint {
   margin-top: 5px;
   font-size: 11px;
-  color: #4a3f2e;
+  color: #5c4e39;
   line-height: 1.5;
 }
 
-/* ── Buttons ── */
+/* ══════════════════════════════════════════════════════════════════
+   9. КНОПКИ
+   ══════════════════════════════════════════════════════════════════ */
+
 .buttons-row {
   display: flex;
   flex-wrap: wrap;
@@ -399,6 +471,7 @@ input[type="file"]::file-selector-button:hover {
   transition: transform 0.1s, box-shadow 0.1s, background 0.15s;
 }
 
+/* Основная кнопка действия: «Добавить в лист» / «Скачать PDF» */
 .btn-primary {
   background: linear-gradient(135deg, #b8922e, var(--gold));
   color: var(--ink);
@@ -412,6 +485,7 @@ input[type="file"]::file-selector-button:hover {
 
 .btn-primary:active { transform: translateY(0); }
 
+/* Второстепенная кнопка: «Сбросить форму» / «Отмена» */
 .btn-ghost {
   background: transparent;
   border: 1px solid var(--border);
@@ -424,7 +498,69 @@ input[type="file"]::file-selector-button:hover {
   background: rgba(201,168,76,0.05);
 }
 
-/* ── Cards list ── */
+/*
+ * Модификатор кнопки «Добавить в лист», когда форма находится в режиме
+ * редактирования — текст меняется на «Сохранить изменения», а сама кнопка
+ * перекрашивается в красный, чтобы визуально отличаться от обычного добавления.
+ */
+.btn-editing {
+  background: linear-gradient(135deg, #7a1f1f, var(--crimson)) !important;
+  box-shadow: 0 6px 20px rgba(122,31,31,0.35) !important;
+  color: var(--parchment) !important;
+}
+
+.btn-editing:hover {
+  box-shadow: 0 10px 26px rgba(122,31,31,0.45) !important;
+}
+
+/* Маленькие квадратные кнопки-иконки (редактировать/удалить) в списке карточек */
+.btn-icon {
+  padding: 5px 7px !important;
+  border-radius: 6px !important;
+  font-size: 11px !important;
+  line-height: 1;
+  color: var(--mist) !important;
+}
+
+.btn-icon:hover { color: var(--parchment) !important; }
+
+.btn-icon-danger:hover {
+  color: #e57373 !important;
+  border-color: rgba(229,115,115,0.3) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   10. БАННЕР РЕЖИМА РЕДАКТИРОВАНИЯ
+   ══════════════════════════════════════════════════════════════════ */
+
+/*
+ * Появляется над полем «Портрет персонажа», когда пользователь нажал
+ * «Редактировать» у одной из карточек в списке. Видимость целиком
+ * управляется атрибутом hidden из script.js (см. syncEditModeUI).
+ */
+.edit-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 9px 14px;
+  background: rgba(201,168,76,0.08);
+  border: 1px solid rgba(201,168,76,0.35);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--gold);
+  letter-spacing: 0.02em;
+}
+
+.edit-banner strong {
+  color: var(--parchment);
+  font-weight: 600;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   11. СПИСОК ДОБАВЛЕННЫХ КАРТОЧЕК
+   ══════════════════════════════════════════════════════════════════ */
+
 .cards-list {
   max-height: 280px;
   margin-top: 14px;
@@ -437,6 +573,13 @@ input[type="file"]::file-selector-button:hover {
 .cards-list::-webkit-scrollbar-track { background: transparent; }
 .cards-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
+.cards-list-empty {
+  font-size: 12px;
+  color: #61523d;
+  padding: 8px 0;
+}
+
+/* Одна строка списка: миниатюра + текстовый лейбл + кнопки действий */
 .cards-list-item {
   display: flex;
   align-items: center;
@@ -448,7 +591,54 @@ input[type="file"]::file-selector-button:hover {
   color: var(--parchment-dark);
 }
 
+/* Подсветка строки той карточки, что сейчас открыта для редактирования */
+.cards-list-item.is-editing {
+  background: rgba(201,168,76,0.06);
+  border-radius: 6px;
+  padding-left: 6px;
+  padding-right: 6px;
+  border-bottom-color: rgba(201,168,76,0.2);
+}
 
+/* Квадратная миниатюра фото персонажа (или «?», если фото нет) */
+.cards-list-thumb {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--ink-light);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #5f513c;
+}
+
+.cards-list-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.cards-list-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--parchment-dark);
+  word-break: break-word; /* длинный лейбл переносится, а не обрезается */
+}
+
+.cards-list-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Бейджи «пустые поля» / «редактируется» рядом с лейблом карточки */
 .mini-badge {
   margin-left: 6px;
   padding: 2px 7px;
@@ -459,7 +649,16 @@ input[type="file"]::file-selector-button:hover {
   letter-spacing: 0.05em;
 }
 
-/* ── Easter egg ── */
+.mini-badge-active {
+  border-color: rgba(201,168,76,0.4) !important;
+  color: var(--gold) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   12. ПАСХАЛКА И ПРЕДУПРЕЖДЕНИЕ NOSCRIPT
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Появляется, если в поле «Имя» ввести «Иваныч» / «Ivanich» — см. EASTER_EGG_NAMES в script.js */
 .easter-egg {
   display: none;
   margin-top: 10px;
@@ -469,7 +668,6 @@ input[type="file"]::file-selector-button:hover {
   letter-spacing: 0.1em;
 }
 
-/* ── noscript ── */
 .noscript-warning {
   display: block;
   margin: 0 28px 0;
@@ -481,9 +679,10 @@ input[type="file"]::file-selector-button:hover {
   font-size: 13px;
 }
 
-/* ══════════════════════════════════════════
-   PREVIEW COLUMN
-══════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════
+   13. КОЛОНКА ПРЕВЬЮ КАРТОЧКИ
+   ══════════════════════════════════════════════════════════════════ */
+
 .preview-wrapper {
   margin-top: 10px;
   padding: 20px;
@@ -497,7 +696,12 @@ input[type="file"]::file-selector-button:hover {
   overflow-x: auto;
 }
 
-/* Card preview: sits on a dark "table" with a subtle shadow */
+/*
+ * Сама карточка визуально «лежит на тёмном столе»: многослойная тень
+ * и лёгкий поворот при наведении создают ощущение физического объекта.
+ * Размеры заданы переменными --card-width/--card-height — их в реальном
+ * времени пересчитывает script.js при изменении ширины карточки.
+ */
 .card-preview {
   position: relative;
   width: var(--card-width);
@@ -521,6 +725,7 @@ input[type="file"]::file-selector-button:hover {
     0 32px 64px rgba(0,0,0,0.4);
 }
 
+/* Тонкая внутренняя обводка поверх содержимого карточки */
 .card-preview::after {
   content: '';
   position: absolute;
@@ -531,9 +736,14 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .card-preview.with-holder-gap { height: var(--card-height-holder); }
+
+/* Версия карточки для скриншота в html2canvas — без отступа margin: 0 auto */
 .card-preview-export { margin: 0; }
 
-/* ── Print section ── */
+/* ══════════════════════════════════════════════════════════════════
+   14. БЛОК ПЕЧАТИ
+   ══════════════════════════════════════════════════════════════════ */
+
 .print-section {
   margin-top: 24px;
   padding-top: 20px;
@@ -547,9 +757,15 @@ input[type="file"]::file-selector-button:hover {
   line-height: 1.6;
 }
 
-/* ══════════════════════════════════════════
-   CARD INTERNALS (unchanged logic)
-══════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════
+   15. ВНУТРЕННЯЯ РАЗМЕТКА САМОЙ КАРТОЧКИ
+   ══════════════════════════════════════════════════════════════════
+   Эти правила формируют визуал и .card-preview (превью в браузере),
+   и временного DOM-элемента, который html2canvas снимает для PDF —
+   поэтому они не должны зависеть от родителей вне самой карточки.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Пунктирная линия сгиба пополам — по ней карточка складывается после печати */
 .card-cut-line {
   position: absolute;
   top: var(--card-cut-line-top);
@@ -564,6 +780,7 @@ input[type="file"]::file-selector-button:hover {
   top: var(--card-cut-line-top-holder);
 }
 
+/* Каждая половина занимает ровно 50% высоты карточки */
 .card-half {
   position: absolute;
   left: 0;
@@ -575,6 +792,10 @@ input[type="file"]::file-selector-button:hover {
   justify-content: flex-start;
 }
 
+/*
+ * Верхняя половина повёрнута на 180° — после печати и сгиба по
+ * .card-cut-line она становится читаемой с обратной стороны карточки.
+ */
 .card-half.top {
   top: 0;
   transform: rotate(180deg);
@@ -598,7 +819,7 @@ input[type="file"]::file-selector-button:hover {
   align-items: stretch;
   justify-content: center;
   width: 100%;
-  height: 66.6667%;
+  height: 66.6667%; /* 2/3 высоты контентной зоны половины карточки */
   overflow: hidden;
   font-size: var(--card-photo-font-size);
   text-align: center;
@@ -611,6 +832,7 @@ input[type="file"]::file-selector-button:hover {
   object-fit: cover;
 }
 
+/* Плейсхолдер «Фото персонажа», пока фото не загружено */
 .card-photo-placeholder {
   display: flex;
   align-items: center;
@@ -637,6 +859,7 @@ input[type="file"]::file-selector-button:hover {
   font-weight: 700;
 }
 
+/* Если имя не задано — вместо него строка-подчёркивание для ручной подписи */
 .card-name.empty {
   justify-content: flex-start;
   padding-left: var(--card-name-empty-padding-left);
@@ -651,11 +874,13 @@ input[type="file"]::file-selector-button:hover {
   padding: 0 var(--card-stats-padding-x) var(--card-stats-padding-bottom);
 }
 
+/* Пустое поле снизу карточки под держатель-подставку (опционально) */
 .card-bottom-gap {
   flex: 0 0 var(--card-gap-height);
   width: 100%;
 }
 
+/* Иконки статов: .shield — круглая (КД), .speed — квадратная (скорость) */
 .shield, .speed {
   position: relative;
   flex: 0 0 auto;
@@ -683,116 +908,18 @@ input[type="file"]::file-selector-button:hover {
   object-fit: contain;
 }
 
+/* Числовое значение поверх SVG-иконки, с лёгкой вертикальной коррекцией */
 .shield span, .speed span {
   position: relative;
   z-index: 1;
   transform: translateY(var(--card-stat-offset));
 }
 
-/* ── Edit mode banner ── */
-.edit-banner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 14px;
-  padding: 9px 14px;
-  background: rgba(201,168,76,0.08);
-  border: 1px solid rgba(201,168,76,0.35);
-  border-radius: 8px;
-  font-size: 12px;
-  color: var(--gold);
-  letter-spacing: 0.02em;
-}
+/* ══════════════════════════════════════════════════════════════════
+   16. АДАПТИВНАЯ ВЁРСТКА
+   ══════════════════════════════════════════════════════════════════ */
 
-.edit-banner strong {
-  color: var(--parchment);
-  font-weight: 600;
-}
-
-/* Save button in edit mode */
-.btn-editing {
-  background: linear-gradient(135deg, #7a1f1f, var(--crimson)) !important;
-  box-shadow: 0 6px 20px rgba(122,31,31,0.35) !important;
-  color: var(--parchment) !important;
-}
-
-.btn-editing:hover {
-  box-shadow: 0 10px 26px rgba(122,31,31,0.45) !important;
-}
-
-/* ── Cards list: richer rows ── */
-.cards-list-empty {
-  font-size: 12px;
-  color: #4a3f2e;
-  padding: 8px 0;
-}
-
-.cards-list-thumb {
-  flex: 0 0 28px;
-  width: 28px;
-  height: 28px;
-  border-radius: 4px;
-  overflow: hidden;
-  background: var(--ink-light);
-  border: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  color: #4a3f2e;
-}
-
-.cards-list-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.cards-list-label {
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--parchment-dark);
-  word-break: break-word;
-}
-
-.cards-list-actions {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.btn-icon {
-  padding: 5px 7px !important;
-  border-radius: 6px !important;
-  font-size: 11px !important;
-  line-height: 1;
-  color: var(--mist) !important;
-}
-
-.btn-icon:hover { color: var(--parchment) !important; }
-
-.btn-icon-danger:hover {
-  color: #e57373 !important;
-  border-color: rgba(229,115,115,0.3) !important;
-}
-
-.cards-list-item.is-editing {
-  background: rgba(201,168,76,0.06);
-  border-radius: 6px;
-  padding-left: 6px;
-  padding-right: 6px;
-  border-bottom-color: rgba(201,168,76,0.2);
-}
-
-.mini-badge-active {
-  border-color: rgba(201,168,76,0.4) !important;
-  color: var(--gold) !important;
-}
-
-
+/* Планшет: две колонки превращаются в одну, форма сверху */
 @media (max-width: 860px) {
   .layout {
     grid-template-columns: 1fr;
@@ -806,6 +933,7 @@ input[type="file"]::file-selector-button:hover {
   }
 }
 
+/* Мобильный телефон: сжимаем отступы, поля и кнопки растягиваем на всю ширину */
 @media (max-width: 600px) {
   .page { padding: 16px 12px 48px; }
   .hero { padding: 32px 8px 28px; }
@@ -829,6 +957,7 @@ input[type="file"]::file-selector-button:hover {
   }
 }
 
+/* Уважаем системную настройку «уменьшить анимацию» */
 @media (prefers-reduced-motion: reduce) {
   .card-preview { transition: none; }
   .card-preview:hover { transform: none; }
