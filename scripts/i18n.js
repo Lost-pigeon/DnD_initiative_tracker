@@ -18,10 +18,20 @@ window.I18N = {
     pageTitle:       "D&D трекер инициативы — генератор карточек для печати",
     metaDescription: "Бесплатный онлайн-генератор карточек инициативы D&D: загрузите портрет, укажите имя, КД и скорость, выберите размер карточки и скачайте PDF для печати.",
 
-    // Шапка
-    heroTitle:    "D&D трекер инициативы",
-    heroSubtitle: "Загрузите портрет, введите имя, КД и скорость — получите двусторонние карточки для физического трекера инициативы в виде PDF для печати и сгиба.",
-    noscript:     "Для работы генератора нужен JavaScript. Включите его в браузере, чтобы создать и скачать карточки.",
+    // Шапка и заголовок
+    heroTitle:       "D&D трекер инициативы",
+    generatorTitle:  "Генератор печатных карточек",
+    heroSubtitle:    "Загрузите портрет, введите имя, КД и скорость — получите двусторонние карточки для физического трекера инициативы в виде PDF для печати и сгиба.",
+    noscript:        "Для работы генератора нужен JavaScript. Включите его в браузере, чтобы создать и скачать карточки.",
+
+    // Заголовки панелей
+    panelPortrait: "Портрет",
+    panelStats:    "Характеристики",
+    panelFormat:   "Формат печати",
+
+    // Метки размера карточки в превью
+    sideOnlyLabel: "одна сторона",
+    sideBothLabel: "двусторонняя",
 
     // Форма — секция персонажа
     sectionCharacter:  "Данные персонажа",
@@ -35,7 +45,7 @@ window.I18N = {
     labelCardWidth:    "Ширина карточки (мм)",
     labelMasterOnly:   "Имя, КД и скорость только на одной стороне",
     hintMasterOnly:    "Когда включено, вторая сторона остаётся пустой для ручного заполнения.",
-    labelHolderGap:    "Добавить пустой край снизу для держателя",
+    labelHolderGap:    "Добавить пустой край снизу",
     hintHolderGap:     "Добавляет поле для вставки в подставку-держатель.",
     labelHolderSize:   "Размер поля для держателя (мм)",
 
@@ -71,7 +81,7 @@ window.I18N = {
       // Заглушки в пустых полях карточки
       emptyList:        "Пока нет карточек в листе.",
       photoPlaceholder: "Фото персонажа",
-      nameEmpty:        "____________________", // линия для ручной подписи
+      nameEmpty:        "__________________", // линия для ручной подписи
 
       // Предупреждения
       noCards: "Добавьте хотя бы одну карточку в лист.",
@@ -101,10 +111,20 @@ window.I18N = {
     pageTitle:       "D&D Initiative Tracker — printable card generator",
     metaDescription: "Free online D&D initiative card generator: upload a portrait, enter name, AC and speed, choose card size and download a print-ready PDF.",
 
-    // Hero
-    heroTitle:    "D&D Initiative Tracker",
-    heroSubtitle: "Upload a portrait, enter name, AC and speed — get double-sided initiative cards as a print-and-fold PDF.",
-    noscript:     "JavaScript is required to use the generator. Please enable it in your browser.",
+    // Header and title
+    heroTitle:       "D&D Initiative Tracker",
+    generatorTitle:  "Printable Card Generator",
+    heroSubtitle:    "Upload a portrait, enter name, AC and speed — get double-sided initiative cards as a print-and-fold PDF.",
+    noscript:        "JavaScript is required to use the generator. Please enable it in your browser.",
+
+    // Panel headings
+    panelPortrait: "Portrait",
+    panelStats:    "Stats",
+    panelFormat:   "Print Format",
+
+    // Card size label in preview
+    sideOnlyLabel: "one side",
+    sideBothLabel: "double-sided",
 
     // Form — character section
     sectionCharacter:  "Character data",
@@ -118,7 +138,7 @@ window.I18N = {
     labelCardWidth:    "Card width (mm)",
     labelMasterOnly:   "Name, AC and speed on one side only",
     hintMasterOnly:    "When enabled, the back side stays blank for handwriting.",
-    labelHolderGap:    "Add blank bottom margin for a card holder",
+    labelHolderGap:    "Add blank bottom margin",
     hintHolderGap:     "Adds a tab for inserting into a physical card holder stand.",
     labelHolderSize:   "Holder margin size (mm)",
 

@@ -232,6 +232,8 @@ window.addEventListener("DOMContentLoaded", () => {
     editBanner: document.getElementById("editBanner"),
     editBannerName: document.getElementById("editBannerName"),
     formTitle: document.getElementById("form-title"),
+    cardsCountBadge: document.getElementById("cardsCountBadge"),
+    stageDims: document.getElementById("stageDims"),
   };
 
   // ══════════════════════════════════════════════════════════════════
@@ -605,6 +607,16 @@ window.addEventListener("DOMContentLoaded", () => {
     updateHolderGapSizeState();
     updateCardSizeHint(card);
     toggleEasterEgg(card.name);
+    updateStageDims(card);
+  }
+
+  function updateStageDims(card) {
+    if (!DOM.stageDims) return;
+    const m = getCardMetrics(card);
+    const h = card.holderGap ? m.heightWithHolderMm : m.heightMm;
+    const sideLabel = card.masterSideOnly ? t("sideOnlyLabel") : t("sideBothLabel");
+    DOM.stageDims.textContent =
+      `${formatMetricNumber(card.cardWidth)} мм × ${formatMetricNumber(h)} мм · ${sideLabel}`;
   }
 
   /** Перечитывает обрезанное фото из CropperJS и обновляет превью. Вызывается событиями ready/cropend. */
@@ -721,6 +733,8 @@ window.addEventListener("DOMContentLoaded", () => {
    */
   function renderCardsList() {
     DOM.cardsList.innerHTML = "";
+
+    if (DOM.cardsCountBadge) DOM.cardsCountBadge.textContent = String(cards.length);
 
     if (!cards.length) {
       const empty = document.createElement("span");
